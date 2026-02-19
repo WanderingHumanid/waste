@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
     const { data: household, error: householdError } = await supabase
       .from('households')
       .select('id, verification_status')
-      .eq('owner_id', user.id)
+      .eq('user_id', user.id)
       .single()
     
     if (householdError || !household) {

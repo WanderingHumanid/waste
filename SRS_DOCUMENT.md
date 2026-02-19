@@ -1,9 +1,9 @@
 # Software Requirements Specification (SRS)
 ## Nirman - Smart Household Waste Management System
 
-**Version:** 1.1  
-**Date:** February 19, 2026  
-**Last Updated:** February 19, 2026 (Public Citizen Layer + Authentication)  
+**Version:** 1.2  
+**Date:** February 20, 2026  
+**Last Updated:** February 20, 2026 (Home Anchor System — QR-free GPS-based Household Registration)  
 **Project Code:** NIRMAN-2026  
 **Aligned With:** SUCHITWA Mission, HARITHA KERALA Mission, Swachh Bharat Abhiyan  
 
@@ -37,7 +37,7 @@ This Software Requirements Specification (SRS) document provides a comprehensive
 ### 1.2 Scope
 Nirman is a Progressive Web Application (PWA) designed to revolutionize household waste management in Indian municipalities, specifically piloted in Kollam Municipal Corporation, Kerala. The system encompasses:
 
-- **Household Registration System**: QR-coded waste bin assignment with geolocation mapping
+- **Home Anchor System**: GPS pin-drop household registration without physical QR codes — users drop a pin on a map, enter a nickname and address, and optionally select their Kollam ward number
 - **AI-Powered Waste Segregation**: Real-time camera-based waste classification using GROQ AI
 - **Smart Collection Signaling**: GPS-based proximity notifications for Haritha Karma Sena (HKS) workers
 - **Circular Marketplace**: P2P trading platform for construction waste materials
@@ -48,6 +48,7 @@ Nirman is a Progressive Web Application (PWA) designed to revolutionize househol
 - **Analytics Dashboard**: Municipal-level waste tracking and reporting
 - **Public Citizen Layer**: Household verification, municipal fee management (₹50/month), blackspot reporting
 - **Multi-Portal Authentication**: Role-based login portals (Citizen, Admin, Worker) with Google OAuth
+- **Digital Bell / Waste Ready Signal**: One-tap `waste_ready` flag on household; HKS workers receive real-time nearby alerts via `pg_notify` + PostGIS proximity filter
 
 ### 1.3 Intended Audience
 - **Municipal Administrators**: System configuration, ward management, reporting
@@ -60,9 +61,10 @@ Nirman is a Progressive Web Application (PWA) designed to revolutionize househol
 ### 1.4 Product Overview
 Nirman bridges the digital divide in waste management by providing a mobile-first PWA that works seamlessly in low-connectivity rural areas. It integrates cutting-edge AI technology (GROQ LLaMA Vision) with established government frameworks (SUCHITWA Mission green credits, HARITHA KERALA waste categories) to create a comprehensive ecosystem for waste reduction, recycling, and circular economy participation.
 
+With the **Home Anchor System** (v1.2), household registration no longer requires a physical government-issued QR code. Citizens independently anchor their home location via GPS pin-drop, supported by Mapbox static map preview and Nominatim reverse geocoding. The `waste_ready` toggle acts as a Digital Bell, broadcasting availability to nearby HKS workers in real time without requiring prior government verification.
+
 ### 1.5 Definitions, Acronyms, and Abbreviations
 - **HKS**: Haritha Karma Sena (Green Army) - waste collection workers in Kerala
-- **NRM**: Nirmal (Clean) - prefix for household QR codes (e.g., NRM-25-100234)
 - **SUCHITWA**: Kerala's Solid Waste Management Mission
 - **HARITHA KERALA**: Kerala's Green Kerala Mission
 - **PWA**: Progressive Web Application
@@ -74,6 +76,8 @@ Nirman bridges the digital divide in waste management by providing a mobile-firs
 - **Ward**: Administrative division of a municipality
 - **ST_DWithin**: PostGIS spatial query function for radius-based searches
 - **Realtime**: Supabase Realtime (WebSocket-based live data synchronization)
+- **Home Anchor**: GPS pin-drop household registration system introduced in v1.2
+- **Digital Bell**: The `waste_ready` toggle on a household; notifies nearby HKS workers in real time
 
 ### 1.6 References
 - SUCHITWA Mission Guidelines (Kerala Government, 2023)
@@ -82,7 +86,8 @@ Nirman bridges the digital divide in waste management by providing a mobile-firs
 - Kollam Municipal Corporation Ward Boundaries
 - PostgreSQL 15.0 Documentation
 - PostGIS 3.4 Spatial Functions Reference
-- OpenStreetMap API Documentation
+- OpenStreetMap Nominatim API Documentation
+- Mapbox Static Tiles API Documentation (map previews)
 - Next.js 16 App Router Documentation
 - Supabase Database & Realtime Documentation
 - GROQ API Vision Model Specification
@@ -107,18 +112,21 @@ Nirman operates as a standalone PWA with backend integration to Supabase (Postgr
 
 - **Hardware Dependencies**:
   - Smartphone camera (minimum 5MP for waste detection)
-  - GPS/location services (accuracy: ±10 meters)
-  - QR code scanner (native camera or external scanner)
+  - GPS/location services (accuracy: ±10 meters for Home Anchor pin-drop; optional — manual address fallback available)
   
 ### 2.2 Product Functions
 The system provides six core functional modules:
 
 #### 2.2.1 Household Registration & Onboarding
-- Multi-step registration wizard (Basic Info → QR Scan → Location Verification → Review)
-- Physical QR code scanning for bin assignment (NRM-XX-XXXXXX format)
-- GPS coordinate capture with PostGIS POINT(longitude, latitude) storage
-- TC address validation against Kollam Municipal Corporation database
-- Ward auto-assignment based on geofencing boundaries
+- **Home Anchor** two-step wizard: GPS pin-drop (LocationPicker) → Address details (AddressForm)
+- GPS coordinate capture from browser Geolocation API or manual map drag, stored as PostGIS POINT(longitude, latitude)
+- Reverse geocoding via Nominatim API to auto-fill readable address (`geocoded_address`)
+- Mapbox Static Tiles API for live map preview thumbnail (token stored in `NEXT_PUBLIC_MAPBOX_TOKEN`)
+- Household nickname (e.g., “My House”, “Office”) for worker reference
+- Manual address entry (TC address or free text) stored as `manual_address`
+- Ward number selection (1–55, Kollam) for zone-based routing
+- No physical QR code required — registration fully self-service from mobile browser
+- `/setup-location` onboarding page; dialog variant (`HomeAnchorDialog`) for in-dashboard updates
 - Email/SMS verification (Supabase Auth + OTP)
 
 #### 2.2.2 AI Waste Segregation Assistant
@@ -229,8 +237,9 @@ The system provides six core functional modules:
 
 #### 2.4.3 Third-Party Integrations
 - **AI Inference**: GROQ Cloud API (LLaMA Vision models)
-- **Maps**: OpenStreetMap (Nominatim for geocoding, Leaflet for rendering)
-- **Authentication**: Supabase Auth (magic links, OTP)
+- **Maps**: OpenStreetMap (Nominatim for reverse geocoding, Leaflet for routing display)
+- **Map Previews**: Mapbox Static Tiles API (token: `NEXT_PUBLIC_MAPBOX_TOKEN` environment variable, never hardcoded)
+- **Authentication**: Supabase Auth (magic links, OTP, Google OAuth)
 - **SMS Gateway**: 2Factor.in (Indian OTP delivery)
 - **Email**: Resend.com (transactional emails)
 - **Analytics**: Plausible Analytics (privacy-focused, GDPR-compliant)
@@ -270,10 +279,9 @@ The system provides six core functional modules:
 #### 2.6.1 Assumptions
 - Users have access to smartphones with cameras (95% smartphone penetration in Kerala)
 - HKS workers receive basic smartphone training from municipality
-- Households are willing to scan QR codes for initial registration
 - Internet connectivity is available at least once daily for data sync
 - Municipal authorities will provide accurate ward boundary GIS data
-- QR codes are physically durable and weather-resistant (UV-printed on bins)
+- GPS/network location is available on the registration device (fallback: manual address entry)
 
 #### 2.6.2 Dependencies
 - **Supabase Availability**: System is 100% dependent on Supabase Cloud uptime
@@ -354,18 +362,25 @@ The system provides six core functional modules:
 ```
 app/
 ├── (auth)/
-│   ├── login/          → Supabase Auth integration
-│   └── register/       → Multi-step form with QR scanning
+│   ├── login/          → Citizen login (Google OAuth + email)
+│   └── register/       → Multi-step form (no QR required since v1.2)
 ├── (main)/
-│   ├── dashboard/      → Green credits, stats cards
+│   ├── dashboard/      → Home Anchor status, Waste Ready toggle, credits, metrics
+│   ├── setup-location/ → Dedicated onboarding page for first-time GPS anchor
 │   ├── segregation/    → Camera + GROQ AI
 │   ├── marketplace/    → Spatial search + chat
 │   ├── chat/           → Realtime messaging
 │   └── profile/        → User settings, history
+├── admin/
+│   └── login/          → Admin portal (purple theme)
+├── worker/
+│   └── login/          → HKS Worker portal (amber theme)
 └── api/
-    ├── households/     → Registration, verification
+    ├── households/     → Establish anchor, update waste_ready, status check
     ├── signals/        → Collection triggers, nearby workers
     ├── marketplace/    → Listing CRUD, spatial queries
+    ├── reports/        → Blackspot reporting CRUD
+    ├── payments/       → Fee status, mark paid
     └── chat/           → Send messages, fetch conversations
 ```
 
@@ -398,23 +413,31 @@ updated_at TIMESTAMPTZ
 ```
 **RLS Policies**: Self-update only, public read (for marketplace seller profiles)
 
-**2. households** (Physical households with geolocation)
+**2. households** (Physical households with geolocation — Home Anchor System v1.2)
 ```sql
 id UUID PRIMARY KEY
 owner_id UUID → profiles.id
-tc_address TEXT (Kerala TC format: "TC 25/1234(1)")
-qr_code TEXT UNIQUE (NRM-25-100234 format)
-ward INTEGER NOT NULL (1-55 for Kollam)
-location GEOGRAPHY(POINT, 4326) (PostGIS spatial type)
-verified BOOLEAN DEFAULT FALSE
-verified_at TIMESTAMPTZ
-verified_by UUID → profiles.id (admin/worker who verified)
+-- Home Anchor fields (replaces QR code system as of migration 00006)
+nickname TEXT DEFAULT 'My House'          -- user-friendly label (e.g., "Home", "Office")
+manual_address TEXT                        -- user-entered free-text address for workers
+geocoded_address TEXT                      -- auto-filled from Nominatim reverse geocoding
+ward_number INTEGER CHECK (ward_number >= 1 AND ward_number <= 55)
+location GEOGRAPHY(POINT, 4326)           -- PostGIS POINT from GPS pin-drop
+location_updated_at TIMESTAMPTZ           -- last GPS pin update timestamp
+waste_ready BOOLEAN DEFAULT false          -- Digital Bell: true = ready for HKS pickup
+-- Citizen Layer verification (migration 00005)
+verification_status verification_status DEFAULT 'pending'
+anchored_at TIMESTAMPTZ                    -- timestamp of worker verification
+anchored_by UUID → profiles.id             -- worker who performed verification
+rejection_reason TEXT
 created_at TIMESTAMPTZ
-indexes: 
-  - GIST index on location (for spatial queries)
-  - UNIQUE index on qr_code
+indexes:
+  - GIST index on location (for ST_DWithin / ST_Distance queries)
+  - B-tree index on ward_number
+  - Partial index on waste_ready WHERE waste_ready = true (worker pickup queue)
 ```
-**RLS Policies**: Owner full CRUD, workers can verify, public read for verified households
+**RLS Policies**: Owner full CRUD; workers can SELECT all locations and UPDATE verification status; own waste_ready toggle via separate policy
+**Note**: `qr_code` column removed in migration 00006. No physical QR code required for registration.
 
 **3. signals** (Waste collection requests)
 ```sql
@@ -504,11 +527,21 @@ synced_at TIMESTAMPTZ
 
 **Spatial Search Functions**:
 ```sql
+-- Legacy collection signal search
 get_nearby_marketplace_items(user_lat FLOAT, user_lon FLOAT, radius_km INT)
-  → Returns items within radius using ST_DWithin(location, ST_MakePoint(lon, lat)::geography, radius_km * 1000)
+  → Returns marketplace items within radius using ST_DWithin
 
 get_nearby_pending_signals(worker_lat FLOAT, worker_lon FLOAT, radius_km INT)
   → Returns pending signals for HKS workers to pick up
+
+-- NEW: Home Anchor spatial functions (migration 00006)
+find_nearest_households(worker_lng DOUBLE, worker_lat DOUBLE, radius_meters DOUBLE DEFAULT 500, max_results INT DEFAULT 20)
+  → Returns all households within radius with distance, sorted nearest-first
+  → Columns: household_id, user_id, nickname, manual_address, waste_ready, ward_number, distance_meters, lat, lng
+
+find_waste_ready_households(worker_lng DOUBLE, worker_lat DOUBLE, radius_meters DOUBLE DEFAULT 1000)
+  → Returns only waste_ready=true households near worker (Digital Bell pickup queue)
+  → Columns: household_id, nickname, manual_address, ward_number, distance_meters, lat, lng
 ```
 
 **Business Logic Functions**:
@@ -539,6 +572,13 @@ notify_new_signal()
 
 notify_new_message()
   → Sends pg_notify('new_message', chat_id) for instant messaging alerts
+
+-- NEW: Home Anchor real-time broadcast (migration 00006)
+broadcast_waste_ready_change()
+  → Fires AFTER UPDATE ON households when waste_ready changes
+  → Sends pg_notify('waste_ready_change', JSON) with household_id, waste_ready boolean,
+     ward_number, lat, lng — allows HKS worker apps to receive Digital Bell signals
+     without polling
 ```
 
 ### 3.4 API Architecture (Next.js API Routes)
@@ -555,10 +595,12 @@ GET  /api/auth/session        → Check current user
 
 **Households**
 ```
-POST /api/households/register → Create household with QR + GPS
-GET  /api/households/:id      → Fetch household details
-PUT  /api/households/:id      → Update TC address, ward
-POST /api/households/verify   → Worker verification (admin only)
+-- Home Anchor endpoints (replaces /api/households/register QR flow)
+POST   /api/households/establish     → Create or upsert household anchor (lat, lng, nickname, manual_address, ward_number)
+PATCH  /api/households/establish     → Toggle waste_ready=true/false (Digital Bell)
+GET    /api/households/status        → Fetch current user's household (location, waste_ready, verification_status)
+PUT    /api/households/:id           → Update TC address, ward, nickname
+POST   /api/households/verify        → Worker verification (admin/worker only)
 ```
 
 **Waste Signals**
@@ -603,6 +645,19 @@ GET /api/analytics/ward/:id  → Ward-specific metrics
 GET /api/analytics/export    → CSV/PDF export for government reports
 ```
 
+**Reports** (Citizen Layer)
+```
+POST /api/reports/blackspot        → Submit blackspot report (photo, GPS, category, severity)
+GET  /api/reports/blackspot        → List open reports (query: ward, radius, status)
+PUT  /api/reports/blackspot/:id    → Update report status (admin/worker only)
+```
+
+**Payments** (Citizen Layer)
+```
+GET  /api/payments/status          → Fetch payment status for current household
+POST /api/payments/status          → Mark payment as paid (worker cash collection)
+```
+
 #### 3.4.2 Realtime Channels (Supabase Realtime)
 
 **Channel Subscriptions**:
@@ -612,6 +667,13 @@ supabase.channel('signals:ward:25')
   .on('postgres_changes', 
     { event: 'INSERT', schema: 'public', table: 'signals', filter: 'ward=eq.25' },
     (payload) => notifyWorker(payload))
+
+// NEW: Digital Bell — waste_ready changes (Home Anchor system)
+supabase.channel('households:waste_ready')
+  .on('postgres_changes',
+    { event: 'UPDATE', schema: 'public', table: 'households', filter: 'waste_ready=eq.true' },
+    (payload) => updateWorkerPickupQueue(payload))
+// Also via pg_notify('waste_ready_change', ...) broadcast trigger for low-latency routing
 
 // New marketplace items (for citizens browsing)
 supabase.channel('marketplace:live')
@@ -634,32 +696,40 @@ supabase.channel(`chat:${userId}`)
 
 #### FR-UM-001: User Registration
 **Priority**: Critical  
-**Description**: New users must be able to register with email/phone, scan their household QR code, and verify their location.
+**Description**: New users must be able to register with email/Google, then anchor their home location via GPS pin-drop (no physical QR code required).
 
 **Acceptance Criteria**:
-1. User provides full name, email, phone number (+91 validation)
-2. Camera permission granted for QR code scanning
-3. QR code format validated (NRM-XX-XXXXXX, where XX = ward number)
-4. GPS coordinates captured (accuracy ≤ 50 meters)
-5. Ward auto-assigned based on geofencing (PostGIS ST_Contains query)
-6. OTP sent to phone number for verification
-7. Profile created with user_role='citizen' by default
-8. Supabase Auth account created with email/phone
+1. User provides full name, email, phone number (+91 validation) or signs in with Google OAuth
+2. After account creation, user is redirected to `/setup-location` (Home Anchor onboarding)
+3. **Step 1 — Location Picker**:
+   - Browser requests Geolocation API permission
+   - If granted: map centres on current GPS position
+   - User drags pin to precise location (supports pan/zoom)
+   - Nominatim reverse geocoding auto-fills `geocoded_address`
+   - Mapbox Static Tiles preview rendered from `NEXT_PUBLIC_MAPBOX_TOKEN`
+4. **Step 2 — Address Details**:
+   - Nickname (default: "My House", max 50 chars) for worker reference
+   - Manual address free-text (TC address or description)
+   - Ward number selector (1–55, Kollam)
+5. User submits → `POST /api/households/establish` creates/upserts household row
+6. GPS coordinates stored as `GEOGRAPHY(POINT, 4326)` in `households.location`
+7. `location_updated_at` set to NOW()
+8. Profile created with `user_role='citizen'`; `waste_ready=false` by default
+9. User redirected to `/dashboard`; `HomeAnchorDialog` available for future edits
 
 **Preconditions**:
-- User has smartphone with camera
-- GPS location services enabled
-- Physical QR code affixed to waste bin provided by municipality
+- User has smartphone or desktop browser with Geolocation API support
+- GPS/network location services enabled (optional — manual address entry as fallback)
 
 **Postconditions**:
 - New row in `profiles` table
-- New row in `households` table (verified=false until admin confirms)
+- New row in `households` table (`waste_ready=false`, `verification_status='pending'`)
 - Email/SMS confirmation sent
 
 **Business Rules**:
-- One household per QR code (UNIQUE constraint on qr_code)
-- QR codes cannot be reused if already registered
-- User must be physically present at household (GPS within 100m of registered location for future logins)
+- One household record per authenticated user (upsert on `user_id`)
+- Location can be updated at any time via `HomeAnchorDialog` (edit mode)
+- No QR code or physical bin required — fully digital registration
 
 #### FR-UM-002: User Authentication
 **Priority**: Critical  
@@ -1180,43 +1250,49 @@ LIMIT 20 OFFSET $page * 20
 
 ### 4.7 Public Citizen Layer Module
 
-#### FR-CL-001: Verified Household Anchoring
+#### FR-CL-001: Home Anchor — GPS-Based Household Registration
 **Priority**: Critical  
-**Description**: Households must be verified by HKS workers during first waste collection to prevent registration abuse and ensure GPS accuracy.
+**Description**: Citizens register their household by dropping a GPS pin on a map (no physical QR code required). The anchor can be updated at any time. Optional worker verification retains the `verification_status` workflow but is not a prerequisite for signalling — households can use `waste_ready` immediately after anchoring.
 
 **Acceptance Criteria**:
-1. New households register with status `pending` (cannot signal until verified)
-2. QR code generated containing household ID and registration timestamp
-3. During first collection, HKS worker scans household QR code
-4. Worker confirms physical location matches registered GPS coordinates (within 50m)
-5. Household status changes to `verified` and can now signal for collection
-6. If location mismatch, worker can reject with reason (status = `rejected`)
+1. User opens `/setup-location` (first-time) or `HomeAnchorDialog` (edit mode in dashboard)
+2. **LocationPicker** component renders an interactive map centred on user's GPS position
+3. User drags the pin to precise household location
+4. Nominatim reverse geocoding fires on every pin move (debounced 500ms) → fills `geocoded_address`
+5. Mapbox Static Tiles preview renders a thumbnail of the saved location (using `NEXT_PUBLIC_MAPBOX_TOKEN`)
+6. **AddressForm** collects: nickname, manual_address, ward_number
+7. `POST /api/households/establish` upserts the household row with `location`, `geocoded_address`, `manual_address`, `nickname`, `ward_number`, `location_updated_at = NOW()`
+8. Dashboard shows `LocationStatusCard` with the saved address and map thumbnail
+9. Edit mode re-opens the same dialog pre-populated with saved values
 
-**Verification Flow**:
+**Verification Flow (optional, backward-compatible)**:
 ```
-[Citizen Registration] → [Generate QR Code] → [Status: pending]
-                                                    ↓
-[HKS Worker Scans QR] → [Compare GPS Coordinates]
-                                    ↓
-            [Match?] YES → [Status: verified] → [Can Signal]
-                     NO  → [Status: rejected] → [Rejection Reason Stored]
+[Home Anchor completed] → [Status: pending, waste_ready usable immediately]
+                                        ↓
+         [HKS Worker visits, confirms physical location matches GPS pin]
+                                        ↓
+                [verification_status = 'verified', anchored_at, anchored_by set]
+            OR  [verification_status = 'rejected', rejection_reason stored]
 ```
 
-**Database Changes**:
-- `households.verification_status`: ENUM ('pending', 'verified', 'rejected')
-- `households.anchored_at`: Timestamp of verification
-- `households.anchored_by`: UUID of verifying worker
-- `households.rejection_reason`: Text explanation for rejection
+**Note**: Unlike the legacy QR flow, `waste_ready` toggling is **not** gated on `verification_status`. The `VerificationBanner` component exists but is disabled in the current dashboard (`v1.2`). It can be re-enabled when government-linked K-SMART verification is required.
+
+**Database Changes (migration 00006)**:
+- `households.qr_code` column **dropped**
+- Added: `nickname`, `manual_address`, `geocoded_address`, `waste_ready`, `ward_number`, `location_updated_at`
 
 **UI Components**:
-- **VerificationBanner**: Shows current status with polling (30-second intervals)
-- **VerificationGuard**: Wrapper component that hides content until verified
-- Status cards: Pending (yellow clock), Verified (green check), Rejected (red X)
+- **LocationPicker**: Leaflet-based interactive map with draggable pin, GPS button, Nominatim auto-fill
+- **AddressForm**: Nickname, manual address, ward selector, WardInfoCard helper
+- **HomeAnchorDialog**: Two-step stepper dialog (Location → Details), supports `editMode`
+- **HomeAnchorPage**: Full-page wrapper used at `/setup-location` for onboarding
+- **LocationStatusCard**: Shows saved address, Mapbox thumbnail, distance/ward info; triggers edit dialog
+- **WardInfoCard**: Inline info about the selected Kollam ward
 
 **Anti-Abuse Measures**:
-- Unverified households cannot signal (button disabled)
-- Signal API returns 403 if `verification_status != 'verified'`
-- Rate limit: 1 registration per phone number per day
+- One household record per user (upsert by `user_id`)
+- Location must be set before `waste_ready` can be toggled (UI guard on dashboard)
+- Rate limit: 5 location updates per hour per user
 
 #### FR-CL-002: Municipal Fee Management
 **Priority**: High  
@@ -1497,7 +1573,7 @@ $$ LANGUAGE sql;
 - **Onboarding**: Interactive tutorial on first login (5 steps, <2 minutes)
 - **Tooltips**: Contextual help on complex features (e.g., "What is PostGIS?" in admin dashboard)
 - **Error Messages**: 
-  - User-friendly language: "Oops! We couldn't find your QR code. Please try scanning again."
+  - User-friendly language: "Oops! We couldn't find your location. Please try dropping the pin again."
   - Actionable suggestions: "Check your internet connection and retry"
 - **Documentation**: Help Center with FAQs (embedded in app, searchable)
 
@@ -1550,14 +1626,14 @@ $$ LANGUAGE sql;
 
 **Summary of Key Tables**:
 1. **profiles**: User identity, roles, green credits
-2. **households**: Physical locations with PostGIS spatial data, verification status
+2. **households**: Physical locations with PostGIS spatial data; Home Anchor fields: `nickname`, `manual_address`, `geocoded_address`, `waste_ready`, `ward_number`, `location_updated_at`; `qr_code` dropped in migration 00006
 3. **signals**: Waste collection requests with realtime triggers
 4. **marketplace_items**: Circular economy listings with spatial search
 5. **chats**: Encrypted P2P messaging
 6. **delivery_tasks**: HKS delivery coordination
 7. **offline_sync_queue**: PWA offline operation queue
-8. **public_reports**: Citizen blackspot reports with spatial location (NEW)
-9. **user_payments**: Municipal fee tracking for SUCHITWA Mission (NEW)
+8. **public_reports**: Citizen blackspot reports with spatial location (migration 00005)
+9. **user_payments**: Municipal fee tracking ₹50/month for SUCHITWA Mission (migration 00005)
 
 **New Enums (Migration 00005)**:
 - `verification_status`: pending | verified | rejected
@@ -1565,23 +1641,27 @@ $$ LANGUAGE sql;
 - `report_status`: open | investigating | resolved | rejected
 - `payment_status`: paid | pending | overdue | waived
 
-**Extensions Required**:
-- uuid-ossp (UUID generation)
-- postgis (Spatial queries)
-- pg_crypto (Message encryption)
-- pg_trgm (Full-text search similarity)
-
-**Indexes**:
-- GIST indexes on all geography columns (including public_reports.location)
-- B-tree indexes on foreign keys
-- Composite indexes on (sender_id, receiver_id, created_at) for chats
-- Partial index on user_payments(status) WHERE status = 'pending'
+**Indexes (Migration 00006 additions)**:
+- GIST index on `households.location` (`households_location_gist_idx`)
+- B-tree index on `households.ward_number`
+- Partial index on `households.waste_ready WHERE waste_ready = true` (worker pickup queue)
 
 **Database Functions (Citizen Layer)**:
-- `anchor_household(household_id, worker_id, verified, rejection_reason)` - Worker verification
-- `get_nearby_blackspots(lat, lon, radius_km, status)` - Spatial query for open reports
-- `get_payment_status(household_id)` - Payment summary for household
-- `generate_monthly_payments()` - Cron job to create payment records
+- `anchor_household(household_id, worker_id, verified, rejection_reason)` — Worker verification
+- `get_nearby_blackspots(lat, lon, radius_km, status)` — Spatial query for open reports
+- `get_payment_status(household_id)` — Payment summary for household
+- `generate_monthly_payments()` — Cron job to create payment records
+
+**Database Functions (Home Anchor — Migration 00006)**:
+- `find_nearest_households(worker_lng, worker_lat, radius_meters, max_results)` — Route optimisation
+- `find_waste_ready_households(worker_lng, worker_lat, radius_meters)` — Digital Bell pickup queue
+- `broadcast_waste_ready_change()` — Trigger function: `pg_notify('waste_ready_change', ...)` on `waste_ready` update
+
+**Extensions Required**:
+- uuid-ossp (UUID generation)
+- postgis (Spatial queries — GEOMETRY, GEOGRAPHY, ST_DWithin, ST_Distance, ST_MakePoint)
+- pg_crypto (Message encryption — pgp_sym_encrypt/decrypt)
+- pg_trgm (Full-text search similarity for marketplace)
 
 ---
 

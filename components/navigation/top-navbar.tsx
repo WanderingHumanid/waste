@@ -52,12 +52,12 @@ export function TopNavbar() {
         if (session?.user) {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('id, full_name, avatar_url, green_credits, role')
+            .select('id, full_name, green_credits, role')
             .eq('id', session.user.id)
             .single()
 
           if (profile) {
-            setUser(profile as UserProfile)
+            setUser({ ...(profile as Omit<UserProfile, 'avatar_url'>), avatar_url: null })
           }
         }
       } catch (error) {

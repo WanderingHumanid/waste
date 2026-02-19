@@ -61,7 +61,7 @@ export default function DashboardPage() {
       
         toast.success(data.wasteReady ? 'Status Updated' : 'Signal Sent!', {
           description: data.wasteReady 
-            ? 'Your waste has been marked as collected.'
+            ? 'Waste ready signal cancelled.'
             : 'Your collection worker has been notified. Expect collection soon!',
         })
       } else {
@@ -151,14 +151,13 @@ export default function DashboardPage() {
                     onClick={toggleWasteReady}
                     disabled={loading}
                     size="lg"
+                    variant={data.wasteReady ? 'outline' : 'default'}
                     className={cn(
                       'md:w-auto',
-                      data.wasteReady
-                        ? 'bg-green-600 hover:bg-green-700 text-white animate-pulse'
-                        : 'bg-primary hover:bg-primary/90'
+                      !data.wasteReady && 'bg-primary hover:bg-primary/90'
                     )}
                   >
-                    {loading ? 'Updating...' : data.wasteReady ? 'Mark as Collected' : 'Mark as Ready'}
+                    {loading ? 'Updating...' : data.wasteReady ? 'Mark as Not Ready' : 'Mark as Ready'}
                   </Button>
                 </div>
               </CardContent>

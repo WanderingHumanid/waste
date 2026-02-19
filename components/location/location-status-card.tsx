@@ -242,18 +242,16 @@ export function LocationStatusCard({
           </div>
         </div>
 
-        {/* Mini Map Preview */}
+        {/* Mini Map Preview — OpenStreetMap iframe (no API key required) */}
         <div className="relative h-32 rounded-lg overflow-hidden bg-muted">
-          <img
-            src={`https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-s+22c55e(${household.lng},${household.lat})/${household.lng},${household.lat},15,0/400x150@2x?access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}`}
-            alt="Location preview"
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              // Fallback to OpenStreetMap static image
-              (e.target as HTMLImageElement).src = `https://staticmap.openstreetmap.de/staticmap.php?center=${household.lat},${household.lng}&zoom=15&size=400x150&markers=${household.lat},${household.lng},ol-marker`
-            }}
+          <iframe
+            title="Location preview"
+            src={`https://www.openstreetmap.org/export/embed.html?bbox=${household.lng - 0.005},${household.lat - 0.005},${household.lng + 0.005},${household.lat + 0.005}&layer=mapnik&marker=${household.lat},${household.lng}`}
+            className="w-full h-full border-0"
+            loading="lazy"
+            style={{ pointerEvents: 'none' }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
         </div>
 
         {/* Waste Ready Toggle - The Digital Bell */}
