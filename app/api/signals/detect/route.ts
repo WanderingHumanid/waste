@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
           ],
         },
       ],
-      model: 'llama-2-vision-90b',
+      model: 'llama-3.2-90b-vision-preview',
       temperature: 0.1,
       max_tokens: 256,
     })
@@ -112,9 +112,9 @@ export async function POST(request: NextRequest) {
     // Extract and parse response
     const content = response.choices[0]?.message?.content
     if (!content || typeof content !== 'string') {
-      console.error('[v0] Invalid response from Groq:', response)
+      console.error('[v0] Invalid response from Groq:', JSON.stringify(response, null, 2))
       return NextResponse.json(
-        { error: 'Invalid response from AI service' },
+        { error: 'Invalid response from AI service', details: response },
         { status: 500 }
       )
     }

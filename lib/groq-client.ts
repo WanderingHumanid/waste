@@ -53,7 +53,7 @@ export async function detectWaste(imageBase64: string): Promise<WasteDetectionRe
           ],
         },
       ],
-      model: 'gpt-4-vision-preview', // Use a vision-capable model from Groq
+      model: 'llama-3.2-90b-vision-preview', // Use a vision-capable model from Groq
       max_tokens: 512,
     })
 
