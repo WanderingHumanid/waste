@@ -70,10 +70,7 @@ export default function AdminLoginPage() {
           .eq('id', data.user.id)
           .single()
 
-        console.log('Profile query result:', { profile, profileError, userId: data.user.id })
-
         if (profileError) {
-          console.error('Profile fetch error:', profileError)
           setError(`Profile error: ${profileError.message}`)
           return
         }
@@ -162,20 +159,19 @@ export default function AdminLoginPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Google Sign In */}
-            <Button
+            <button
               type="button"
-              variant="outline"
-              className="w-full h-10 bg-white hover:bg-zinc-100 text-zinc-900 border-0 text-sm font-medium"
+              className="w-full h-10 bg-white hover:bg-zinc-100 text-zinc-900 border-0 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
               onClick={handleGoogleLogin}
               disabled={googleLoading || loading}
             >
               {googleLoading ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin text-zinc-900" />
               ) : (
-                <GoogleLogo className="w-4 h-4 mr-2" />
+                <GoogleLogo className="w-4 h-4" />
               )}
               Continue with Google
-            </Button>
+            </button>
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center">

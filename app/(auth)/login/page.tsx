@@ -68,8 +68,22 @@ export default function LoginPage() {
       }
 
       if (data.user) {
+        // Check user role and redirect accordingly
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single()
+
         toast.success('Welcome back!')
-        router.push('/dashboard')
+        
+        if (profile?.role === 'admin') {
+          router.push('/admin/dashboard')
+        } else if (profile?.role === 'worker') {
+          router.push('/worker/dashboard')
+        } else {
+          router.push('/dashboard')
+        }
         router.refresh()
       }
     } catch (err) {

@@ -103,8 +103,15 @@ export function AdminSidebar({ className }: AdminSidebarProps) {
   }
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    router.push('/admin/login')
+    try {
+      await supabase.auth.signOut()
+      // Use window.location for a hard redirect to clear all state
+      window.location.href = '/admin/login'
+    } catch (error) {
+      console.error('Sign out error:', error)
+      // Force redirect even on error
+      window.location.href = '/admin/login'
+    }
   }
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '?')

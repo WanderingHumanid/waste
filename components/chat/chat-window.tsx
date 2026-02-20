@@ -61,7 +61,6 @@ export function ChatWindow({ currentUserId, otherUserId, initialItemId }: ChatWi
         markAsRead()
 
         // Realtime subscription
-        console.log(`Subscribing to chat updates for user ${currentUserId} with ${otherUserId}`)
         const channel = supabase
             .channel(`chat_debug:${currentUserId}`)
             .on(
@@ -72,7 +71,6 @@ export function ChatWindow({ currentUserId, otherUserId, initialItemId }: ChatWi
                     table: 'chats',
                 },
                 (payload) => {
-                    console.log('Realtime payload received:', payload)
                     const newMsg = payload.new as Message
                     const oldMsg = payload.old as Message
 
@@ -97,9 +95,7 @@ export function ChatWindow({ currentUserId, otherUserId, initialItemId }: ChatWi
                     }
                 }
             )
-            .subscribe((status) => {
-                console.log('Supabase Realtime Status:', status)
-            })
+            .subscribe()
 
         return () => {
             supabase.removeChannel(channel)

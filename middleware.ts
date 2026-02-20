@@ -26,7 +26,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
+          cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           )
           response = NextResponse.next({
@@ -39,9 +39,6 @@ export async function middleware(request: NextRequest) {
       },
     }
   )
-
-  // Check authentication - use getUser() for server-side verification
-  const { data: { user }, error } = await supabase.auth.getUser()
 
   // Public routes that don't require authentication
   const publicRoutes = [
@@ -57,6 +54,9 @@ export async function middleware(request: NextRequest) {
 
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
 
+  // Check authentication - use getUser() for server-side verification
+  const { data: { user }, error } = await supabase.auth.getUser()
+
   // If user is not logged in and trying to access protected route
   if ((!user || error) && !isPublicRoute) {
     const redirectUrl = new URL('/login', request.url)
@@ -66,65 +66,45 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
+  // No user - allow access to public routes
+  if (!user) {
+    return response
+  }
+
+  // Fetch profile ONCE for all subsequent checks
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  const role = profile?.role || 'citizen'
+
   // If user is logged in and trying to access login pages or root, redirect based on role
-  if (user && (pathname === '/login' || pathname === '/register' || pathname === '/')) {
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    console.log('[Middleware] User:', user.email, 'Role:', profile?.role, 'Error:', profileError?.message)
-
-    if (profile?.role === 'admin') {
-      console.log('[Middleware] Redirecting admin to /admin/dashboard')
+  if (pathname === '/login' || pathname === '/register' || pathname === '/') {
+    if (role === 'admin') {
       return NextResponse.redirect(new URL('/admin/dashboard', request.url))
-    } else if (profile?.role === 'worker') {
+    } else if (role === 'worker') {
       return NextResponse.redirect(new URL('/worker/dashboard', request.url))
     }
-    console.log('[Middleware] Redirecting citizen to /dashboard')
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
-  // Protect all /admin/* routes (except /admin/login)
+  // Protect /admin/* routes (except /admin/login)
   if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
-    if (!user) {
-      return NextResponse.redirect(new URL('/admin/login', request.url))
-    }
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-    if (profile?.role !== 'admin') {
+    if (role !== 'admin') {
       return NextResponse.redirect(new URL('/admin/login', request.url))
     }
   }
 
-  // If logged in user visits admin login, check if they're admin
-  if (user && pathname === '/admin/login') {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (profile?.role === 'admin') {
-      return NextResponse.redirect(new URL('/admin/dashboard', request.url))
-    }
+  // If logged in user visits admin login and is admin, redirect to dashboard
+  if (pathname === '/admin/login' && role === 'admin') {
+    return NextResponse.redirect(new URL('/admin/dashboard', request.url))
   }
 
-  // If logged in user visits worker login, check if they're worker
-  if (user && pathname === '/worker/login') {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (profile?.role === 'worker' || profile?.role === 'admin') {
-      return NextResponse.redirect(new URL('/worker/dashboard', request.url))
-    }
+  // If logged in user visits worker login and is worker/admin, redirect to dashboard
+  if (pathname === '/worker/login' && (role === 'worker' || role === 'admin')) {
+    return NextResponse.redirect(new URL('/worker/dashboard', request.url))
   }
 
   return response
@@ -132,12 +112,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Match all pathnames except for:
-    // - api (API routes)
-    // - _next/static (static files)
-    // - _next/image (image optimization files)
-    // - favicon.ico (favicon file)
-    // - public folder
     '/((?!api|_next/static|_next/image|favicon.ico|.*\\.png|.*\\.jpg|.*\\.svg).*)',
   ],
 }

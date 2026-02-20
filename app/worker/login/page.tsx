@@ -152,7 +152,7 @@ export default function WorkerLoginPage() {
             <Button
               type="button"
               variant="outline"
-              className="w-full h-12 text-base font-medium bg-white hover:bg-gray-100 text-gray-900 border-0"
+              className="w-full h-12 text-base font-medium bg-white hover:bg-gray-100 text-white border-0"
               onClick={handleGoogleLogin}
               disabled={googleLoading || loading}
             >

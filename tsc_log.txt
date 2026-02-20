@@ -1,4 +1,0 @@
-app/api/chat/messages/route.ts(62,11): error TS7034: Variable 'messages' implicitly has type 'any[]' in some locations where its type cannot be determined.
-app/api/chat/messages/route.ts(65,24): error TS7005: Variable 'messages' implicitly has an 'any[]' type.
-app/api/signals/detect/route.ts(8,18): error TS2307: Cannot find module '@groq/sdk' or its corresponding type declarations.
-lib/groq-client.ts(6,18): error TS2307: Cannot find module '@groq/sdk' or its corresponding type declarations.
