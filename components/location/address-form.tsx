@@ -11,8 +11,8 @@ import { Badge } from '@/components/ui/badge'
 import { Home, MapPin, Building2, Loader2, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-// Kollam wards (1-55)
-const KOLLAM_WARDS = Array.from({ length: 55 }, (_, i) => i + 1)
+// Piravom wards (1-19)
+const PIRAVOM_WARDS = Array.from({ length: 19 }, (_, i) => i + 1)
 
 export interface AddressFormData {
   nickname: string
@@ -137,10 +137,10 @@ export function AddressForm({
             onValueChange={(val) => handleChange('wardNumber', val ? parseInt(val) : null)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select your ward (1-55)" />
+              <SelectValue placeholder="Select your ward (1-19)" />
             </SelectTrigger>
             <SelectContent className="max-h-[300px]">
-              {KOLLAM_WARDS.map((ward) => (
+              {PIRAVOM_WARDS.map((ward) => (
                 <SelectItem key={ward} value={ward.toString()}>
                   Ward {ward}
                 </SelectItem>
@@ -148,7 +148,7 @@ export function AddressForm({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Kollam has 55 wards. Select your ward for zone-based waste collection routing.
+            Piravom has 19 wards. Select your ward for zone-based waste collection routing.
           </p>
         </div>
       </CardContent>
@@ -172,7 +172,7 @@ export function WardInfoCard({ wardNumber }: { wardNumber: number | null }) {
               Ward {wardNumber}
             </p>
             <p className="text-sm text-orange-700 dark:text-orange-300">
-              Kollam Municipal Corporation
+              Piravom Grama Panchayat
             </p>
           </div>
         </div>

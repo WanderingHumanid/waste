@@ -72,6 +72,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
+  // Protect all /admin/* routes (except /admin/login)
+  if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
+    if (!session) {
+      return NextResponse.redirect(new URL('/admin/login', request.url))
+    }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single()
+    if (profile?.role !== 'admin') {
+      return NextResponse.redirect(new URL('/admin/login', request.url))
+    }
+  }
+
   // If logged in user visits admin login, check if they're admin
   if (session && pathname === '/admin/login') {
     const { data: profile } = await supabase

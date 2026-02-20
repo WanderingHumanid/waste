@@ -66,7 +66,10 @@ export function MarketplaceItemDialog({
     const [internalOpen, setInternalOpen] = useState(false)
     const isControlled = controlledOpen !== undefined
     const open = isControlled ? controlledOpen : internalOpen
-    const setOpen = isControlled ? setControlledOpen : setInternalOpen
+    const setOpen = (value: boolean) => {
+        if (isControlled) setControlledOpen?.(value)
+        else setInternalOpen(value)
+    }
 
     const [loading, setLoading] = useState(false)
     const supabase = createClient()

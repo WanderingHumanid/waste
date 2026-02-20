@@ -66,8 +66,8 @@ export function LocationPicker({
   className,
   height = '400px',
 }: LocationPickerProps) {
-  // Default to Kollam, Kerala coordinates
-  const defaultPosition: Coordinates = { lat: 8.8932, lng: 76.6141 }
+  // Default to Piravom, Kerala coordinates
+  const defaultPosition: Coordinates = { lat: 9.9943, lng: 76.5373 }
   const [position, setPosition] = useState<Coordinates>(value || defaultPosition)
   const [isLocating, setIsLocating] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)

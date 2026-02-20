@@ -129,15 +129,15 @@ export async function POST(request: NextRequest) {
     // Step 2: Determine ward from coordinates
     // ========================================
     
-    // For now, estimate ward based on known Kollam boundaries
+    // For now, estimate ward based on known Piravom boundaries
     // In production, use PostGIS ST_Contains with ward boundary polygons
     let estimatedWard: number | null = null
     
-    // Rough ward estimation for Kollam city center
-    if (body.latitude >= 8.87 && body.latitude <= 8.92 && 
-        body.longitude >= 76.55 && body.longitude <= 76.62) {
-      // Central Kollam area - estimate ward based on coordinates
-      estimatedWard = Math.floor((body.latitude - 8.87) * 100 + (body.longitude - 76.55) * 50) % 55 + 1
+    // Rough ward estimation for Piravom area
+    if (body.latitude >= 9.97 && body.latitude <= 10.02 && 
+        body.longitude >= 76.51 && body.longitude <= 76.56) {
+      // Piravom area - estimate ward based on coordinates
+      estimatedWard = Math.floor((body.latitude - 9.97) * 100 + (body.longitude - 76.51) * 50) % 19 + 1
     }
     
     // ========================================

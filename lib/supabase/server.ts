@@ -3,7 +3,7 @@
  * Server-safe client for protected operations, database mutations
  */
 
-import { createServerClient, serializeCookieHeader } from '@supabase/auth-helpers-nextjs'
+import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 export async function createClient() {

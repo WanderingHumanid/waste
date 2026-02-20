@@ -72,7 +72,7 @@ CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
 CREATE TABLE IF NOT EXISTS households (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  qr_code TEXT UNIQUE NOT NULL,
+  qr_code TEXT NOT NULL DEFAULT uuid_generate_v4()::TEXT,
   
   -- Spatial data (PostGIS Point)
   location GEOGRAPHY(POINT, 4326) NOT NULL,
@@ -101,7 +101,16 @@ ALTER TABLE households ENABLE ROW LEVEL SECURITY;
 -- Create spatial index for efficient queries
 CREATE INDEX IF NOT EXISTS idx_households_location ON households USING GIST(location);
 CREATE INDEX IF NOT EXISTS idx_households_user_id ON households(user_id);
-CREATE INDEX IF NOT EXISTS idx_households_qr_code ON households(qr_code);
+-- qr_code index is only created if the column exists (it is dropped by migration 00006)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'households' AND column_name = 'qr_code'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_households_qr_code ON households(qr_code);
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_households_ward ON households(ward);
 
 -- =====================================================

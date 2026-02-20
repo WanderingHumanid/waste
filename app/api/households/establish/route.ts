@@ -41,10 +41,10 @@ function validateCoordinates(lat: number, lng: number): boolean {
   return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
 }
 
-// Validate ward number for Kollam (1-55)
+// Validate ward number for Piravom (1-19)
 function validateWard(ward: number | null | undefined): boolean {
   if (ward === null || ward === undefined) return true
-  return ward >= 1 && ward <= 55
+  return ward >= 1 && ward <= 19
 }
 
 export async function POST(request: NextRequest) {
@@ -202,7 +202,7 @@ export async function GET(request: NextRequest) {
     if (error && error.code !== 'PGRST116') {
       console.error('Error fetching household:', error)
       return NextResponse.json(
-        { success: false, error: 'Failed to fetch household.' },
+        { success: false, error: `Failed to fetch household. [${error.code}] ${error.message}` },
         { status: 500 }
       )
     }

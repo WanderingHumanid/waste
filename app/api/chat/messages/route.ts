@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     }
 
     // TODO: Implement Supabase query
-    const messages = []
+    const messages: Record<string, unknown>[] = []
 
     return NextResponse.json(
       { success: true, messages, total: 0 },

@@ -111,8 +111,6 @@ export function TopNavbar() {
     )
   }
 
-  if (!user) return null
-
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center justify-between px-4 max-w-7xl mx-auto">
@@ -150,7 +148,7 @@ export function TopNavbar() {
           {/* Green Credits Badge */}
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 rounded-full text-sm font-medium">
             <Coins className="w-4 h-4" />
-            <span>{user.green_credits || 0}</span>
+            <span>{user?.green_credits || 0}</span>
           </div>
 
           {/* Notifications */}
@@ -164,9 +162,9 @@ export function TopNavbar() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-9 w-9 rounded-full">
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src={user.avatar_url || undefined} alt={user.full_name || 'User'} />
+                  <AvatarImage src={user?.avatar_url || undefined} alt={user?.full_name || 'User'} />
                   <AvatarFallback className="bg-primary/10 text-primary">
-                    {getInitials(user.full_name)}
+                    {getInitials(user?.full_name ?? null)}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -174,14 +172,14 @@ export function TopNavbar() {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium">{user.full_name || 'User'}</p>
+                  <p className="text-sm font-medium">{user?.full_name || 'User'}</p>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-xs capitalize">
-                      {user.role}
+                      {user?.role || 'citizen'}
                     </Badge>
                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <Coins className="w-3 h-3" />
-                      {user.green_credits || 0}
+                      {user?.green_credits || 0}
                     </span>
                   </div>
                 </div>
@@ -244,7 +242,7 @@ export function TopNavbar() {
             {/* Mobile Green Credits */}
             <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
               <Coins className="w-4 h-4 text-green-600" />
-              <span>{user.green_credits || 0} Green Credits</span>
+              <span>{user?.green_credits || 0} Green Credits</span>
             </div>
           </nav>
         </div>

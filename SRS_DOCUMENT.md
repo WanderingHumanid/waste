@@ -1,9 +1,9 @@
 # Software Requirements Specification (SRS)
 ## Nirman - Smart Household Waste Management System
 
-**Version:** 1.2  
+**Version:** 1.3  
 **Date:** February 20, 2026  
-**Last Updated:** February 20, 2026 (Home Anchor System — QR-free GPS-based Household Registration)  
+**Last Updated:** February 20, 2026 (Admin Command Center — Geospatial Intelligence, User Management & Analytics Portal)  
 **Project Code:** NIRMAN-2026  
 **Aligned With:** SUCHITWA Mission, HARITHA KERALA Mission, Swachh Bharat Abhiyan  
 
@@ -15,6 +15,15 @@
 2. [Overall Description](#2-overall-description)
 3. [System Architecture](#3-system-architecture)
 4. [Functional Requirements](#4-functional-requirements)
+   - 4.1 User Management
+   - 4.2 Waste Segregation
+   - 4.3 Waste Collection
+   - 4.4 Circular Marketplace
+   - 4.5 Gamification
+   - 4.6 Communication
+   - 4.7 Public Citizen Layer
+   - 4.8 Authentication
+   - **4.9 Admin Command Center** *(v1.3)*
 5. [Non-Functional Requirements](#5-non-functional-requirements)
 6. [Database Requirements](#6-database-requirements)
 7. [API Specifications](#7-api-specifications)
@@ -35,9 +44,9 @@
 This Software Requirements Specification (SRS) document provides a comprehensive description of the Nirman Smart Household Waste Management System. It details all functional and non-functional requirements, system architecture, database design, API specifications, and implementation guidelines for a complete waste management solution aligned with Indian government initiatives (SUCHITWA Mission, HARITHA KERALA Mission, and Swachh Bharat Abhiyan).
 
 ### 1.2 Scope
-Nirman is a Progressive Web Application (PWA) designed to revolutionize household waste management in Indian municipalities, specifically piloted in Kollam Municipal Corporation, Kerala. The system encompasses:
+Nirman is a Progressive Web Application (PWA) designed to revolutionize household waste management in Indian municipalities, specifically piloted in Piravom Grama Panchayat, Kerala. The system encompasses:
 
-- **Home Anchor System**: GPS pin-drop household registration without physical QR codes — users drop a pin on a map, enter a nickname and address, and optionally select their Kollam ward number
+- **Home Anchor System**: GPS pin-drop household registration without physical QR codes — users drop a pin on a map, enter a nickname and address, and optionally select their Piravom ward number
 - **AI-Powered Waste Segregation**: Real-time camera-based waste classification using GROQ AI
 - **Smart Collection Signaling**: GPS-based proximity notifications for Haritha Karma Sena (HKS) workers
 - **Circular Marketplace**: P2P trading platform for construction waste materials
@@ -49,6 +58,7 @@ Nirman is a Progressive Web Application (PWA) designed to revolutionize househol
 - **Public Citizen Layer**: Household verification, municipal fee management (₹50/month), blackspot reporting
 - **Multi-Portal Authentication**: Role-based login portals (Citizen, Admin, Worker) with Google OAuth
 - **Digital Bell / Waste Ready Signal**: One-tap `waste_ready` flag on household; HKS workers receive real-time nearby alerts via `pg_notify` + PostGIS proximity filter
+- **Admin Command Center** (v1.3): Secure administrator portal with KPI dashboards, PostGIS-powered geospatial heatmaps with ML predictions, role escalation, ward assignment, fleet management, audit logs, and recharts-based analytics (zinc/emerald design theme)
 
 ### 1.3 Intended Audience
 - **Municipal Administrators**: System configuration, ward management, reporting
@@ -78,12 +88,17 @@ With the **Home Anchor System** (v1.2), household registration no longer require
 - **Realtime**: Supabase Realtime (WebSocket-based live data synchronization)
 - **Home Anchor**: GPS pin-drop household registration system introduced in v1.2
 - **Digital Bell**: The `waste_ready` toggle on a household; notifies nearby HKS workers in real time
+- **Admin Command Center**: The `/admin/*` portal introduced in v1.3 providing Municipal Administrators with secure access to dashboards, user management, geospatial heatmaps, and audit logs
+- **Hotspot**: A geographic cluster of high-density waste signals identified via PostGIS K-Means spatial clustering (`ST_ClusterKMeans`)
+- **ML Prediction**: Simulated machine-learning waste volume prediction layer on the admin map — indicates predicted high-generation areas based on signal frequency and household density
+- **worker_assignments**: Table linking a worker (`worker_id`) to a specific ward and district for routing and fleet management
+- **admin_logs**: Immutable audit table recording all role-escalation and ward-assignment actions performed by administrators
 
 ### 1.6 References
 - SUCHITWA Mission Guidelines (Kerala Government, 2023)
 - HARITHA KERALA Mission Standards (2024)
 - Swachh Bharat Mission Urban Framework (Ministry of Housing and Urban Affairs)
-- Kollam Municipal Corporation Ward Boundaries
+- Piravom Grama Panchayat Ward Boundaries
 - PostgreSQL 15.0 Documentation
 - PostGIS 3.4 Spatial Functions Reference
 - OpenStreetMap Nominatim API Documentation
@@ -124,7 +139,7 @@ The system provides six core functional modules:
 - Mapbox Static Tiles API for live map preview thumbnail (token stored in `NEXT_PUBLIC_MAPBOX_TOKEN`)
 - Household nickname (e.g., “My House”, “Office”) for worker reference
 - Manual address entry (TC address or free text) stored as `manual_address`
-- Ward number selection (1–55, Kollam) for zone-based routing
+- Ward number selection (1–19, Piravom) for zone-based routing
 - No physical QR code required — registration fully self-service from mobile browser
 - `/setup-location` onboarding page; dialog variant (`HomeAnchorDialog`) for in-dashboard updates
 - Email/SMS verification (Supabase Auth + OTP)
@@ -174,6 +189,16 @@ The system provides six core functional modules:
 - Marketplace transaction volume and material reuse statistics
 - Export capabilities (PDF reports, CSV data dumps for government)
 - Public transparency portal (anonymized aggregated data)
+
+#### 2.2.7 Admin Command Center (v1.3)
+- **Secure portal** at `/admin/*` — accessible only to users with `role = 'admin'` (enforced in Next.js middleware and Supabase RLS)
+- **Overview Dashboard**: 4 live KPI cards (Total Users, Active Workers, Pending Signals, Revenue Estimate), 7-day predicted vs actual trend LineChart, waste-type donut PieChart, ward coverage progress bars, recent audit-log feed
+- **User Management** (`/admin/users`): Paginated searchable table of all profiles with role filter; "Promote" dialog for role escalation (`citizen → worker → admin`); "Assign Ward" dialog with ward number (1–19) + 14 Kerala districts; all actions written to `admin_logs`
+- **Geospatial Intelligence Map** (`/admin/map`): Leaflet dark map (CartoDB DarkMatter) with three toggleable layers — Live Signals (amber circles), ML Predictions (deep-red dashed circles), Households (sky/emerald circles); right panel shows legend, top hotspot wards, ML prediction cards; real-time 30-second polling; district filter
+- **Fleet Management** (`/admin/fleet`): Worker assignment overview (stub — Phase 2 routing engine)
+- **Finance** (`/admin/finance`): Revenue and payment tracking (stub — Phase 2 payment gateway)
+- **Audit Logs** (`/admin/logs`): Full `admin_logs` table viewer with action type and diff
+- **Design**: Zinc-950 sidebar, emerald-500 active accents, rose/amber signal colors — no purple used in admin portal
 
 ### 2.3 User Classes and Characteristics
 
@@ -250,7 +275,7 @@ The system provides six core functional modules:
 - **Data Privacy**: Compliance with Digital Personal Data Protection Act, 2023 (India)
 - **Waste Management**: Adherence to Solid Waste Management Rules, 2016
 - **Hazardous Waste**: Battery/e-waste handling per E-Waste Management Rules, 2022
-- **Municipal Bylaws**: Kollam Corporation Waste Management Regulations
+- **Municipal Bylaws**: Piravom Panchayat Waste Management Regulations
 - **Open Data**: Public datasets must follow India Open Government Data Platform standards
 
 #### 2.5.2 Technical Constraints
@@ -263,7 +288,7 @@ The system provides six core functional modules:
 #### 2.5.3 Business Constraints
 - **Budget**: ₹20 lakhs for development + ₹5 lakhs annual hosting
 - **Timeline**: 6 months for MVP, 12 months for full deployment
-- **Scalability**: Must support 100,000 households (Kollam population: 350,000)
+- **Scalability**: Must support 100,000 households (Piravom population: 35,000)
 - **Uptime**: 99.5% availability (允许 downtime: 3.65 hours/month)
 - **Response Time**: API calls must complete within 2 seconds on 3G networks
 
@@ -372,7 +397,13 @@ app/
 │   ├── chat/           → Realtime messaging
 │   └── profile/        → User settings, history
 ├── admin/
-│   └── login/          → Admin portal (purple theme)
+│   ├── login/          → Admin login (zinc/emerald dark theme, demo-credentials button)
+│   ├── dashboard/      → KPI cards, Recharts trend + waste-type charts, audit feed
+│   ├── users/          → Paginated user table, role-escalation dialog, ward-assignment dialog
+│   ├── map/            → Leaflet dark-map with signal/ML-prediction/household layers
+│   ├── fleet/          → Worker-to-ward assignment overview (Phase 2 routing)
+│   ├── finance/        → Payment & revenue summary (Phase 2 gateway integration)
+│   └── logs/           → Audit log viewer for admin_logs table
 ├── worker/
 │   └── login/          → HKS Worker portal (amber theme)
 └── api/
@@ -381,7 +412,8 @@ app/
     ├── marketplace/    → Listing CRUD, spatial queries
     ├── reports/        → Blackspot reporting CRUD
     ├── payments/       → Fee status, mark paid
-    └── chat/           → Send messages, fetch conversations
+    ├── chat/           → Send messages, fetch conversations
+    └── admin/          → Stats KPI aggregation, paginated user management (PATCH role/ward), PostGIS hotspot layers
 ```
 
 #### 3.2.2 State Management
@@ -523,6 +555,31 @@ synced_at TIMESTAMPTZ
 **RLS Policies**: User can only access their own sync queue
 **Purpose**: Store offline operations for later sync when online
 
+**8. admin_logs** (Admin audit trail — Migration 00007)
+```sql
+id UUID PRIMARY KEY
+admin_id UUID → profiles.id          -- admin who performed the action
+action_type TEXT NOT NULL             -- e.g. 'role_change', 'ward_assignment'
+target_user_id UUID → profiles.id    -- user being modified
+old_value JSONB                       -- state before change
+new_value JSONB                       -- state after change
+created_at TIMESTAMPTZ DEFAULT NOW()
+```
+**RLS Policies**: Admin-only SELECT and INSERT; no UPDATE/DELETE (immutable audit log)
+**Purpose**: Record every role-escalation or ward-assignment for accountability and compliance
+
+**9. worker_assignments** (Worker-to-ward mapping — Migration 00007)
+```sql
+id UUID PRIMARY KEY
+worker_id UUID UNIQUE → profiles.id   -- one assignment per worker
+ward_number INTEGER                   -- Piravom ward (1–19)
+district TEXT                         -- Kerala district (e.g., 'Ernakulam')
+assigned_at TIMESTAMPTZ DEFAULT NOW()
+assigned_by UUID → profiles.id        -- admin who made the assignment
+```
+**RLS Policies**: Admin full CRUD; workers SELECT own row
+**Purpose**: Fleet management — enables route optimisation and load balancing across wards
+
 #### 3.3.2 Database Functions (Business Logic)
 
 **Spatial Search Functions**:
@@ -544,8 +601,25 @@ find_waste_ready_households(worker_lng DOUBLE, worker_lat DOUBLE, radius_meters 
   → Columns: household_id, nickname, manual_address, ward_number, distance_meters, lat, lng
 ```
 
-**Business Logic Functions**:
+**Database Functions (Admin Command Center — Migration 00007)**:
 ```sql
+get_waste_hotspots(p_ward INT DEFAULT NULL, p_district TEXT DEFAULT NULL)
+  → Runs K-Means clustering (ST_ClusterKMeans) on signals + households
+  → Returns cluster centroids with intensities for the map heatmap layer
+
+get_household_density(cell_size_meters FLOAT DEFAULT 200)
+  → Divides Piravom bounding box into a regular grid
+  → Returns grid cells with household counts for density choropleth
+```
+
+**Triggers (Admin — Migration 00007)**:
+```sql
+log_profile_changes()
+  → Fires AFTER UPDATE ON profiles when role changes
+  → Inserts row into admin_logs with old_value / new_value JSONB diff
+```
+
+**Database Functions (Business Logic Functions)**:
 generate_household_qr(ward INTEGER)
   → Generates unique NRM-XX-XXXXXX QR codes
 
@@ -645,6 +719,14 @@ GET /api/analytics/ward/:id  → Ward-specific metrics
 GET /api/analytics/export    → CSV/PDF export for government reports
 ```
 
+**Admin Command Center** (Admin role required — v1.3)
+```
+GET  /api/admin/stats            → KPI aggregation: total users, workers, signals, revenue, waste-type breakdown, 7-day weekly trend
+GET  /api/admin/users            → Paginated + searchable user list (query: search, role, page, limit)
+PATCH /api/admin/users           → Role escalation (action: set_role) or ward assignment (action: assign_ward); writes to admin_logs
+GET  /api/admin/hotspots         → PostGIS hotspot layers: signals, households, ML predictions, workers; returns topWards + center
+```
+
 **Reports** (Citizen Layer)
 ```
 POST /api/reports/blackspot        → Submit blackspot report (photo, GPS, category, severity)
@@ -710,7 +792,7 @@ supabase.channel(`chat:${userId}`)
 4. **Step 2 — Address Details**:
    - Nickname (default: "My House", max 50 chars) for worker reference
    - Manual address free-text (TC address or description)
-   - Ward number selector (1–55, Kollam)
+   - Ward number selector (1–19, Piravom)
 5. User submits → `POST /api/households/establish` creates/upserts household row
 6. GPS coordinates stored as `GEOGRAPHY(POINT, 4326)` in `households.location`
 7. `location_updated_at` set to NOW()
@@ -859,7 +941,7 @@ const response = await groq.chat.completions.create({
 5. New row created in `signals` table with status='pending'
 6. pg_notify trigger broadcasts to Realtime channel `signals:ward:XX`
 7. All HKS workers in that ward's mobile app receive push notification:
-   - "New waste collection request in Ward 25"
+   - "New waste collection request in Ward 9"
    - Distance from worker's current location (calculated via ST_Distance)
    - Household TC address
    - "Tap to accept assignment"
@@ -993,7 +1075,7 @@ const response = await groq.chat.completions.create({
 **Validation Rules**:
 - Title must not contain profanity (check against banned words list)
 - At least 1 photo required (prevents low-quality listings)
-- Location must be within Kollam Municipal Corporation boundaries (PostGIS bounding box check)
+- Location must be within Piravom Grama Panchayat boundaries (PostGIS bounding box check)
 - User can have maximum 10 active listings at once
 
 **Photo Upload Flow**:
@@ -1027,7 +1109,7 @@ const response = await groq.chat.completions.create({
    - Primary photo (tap to view full gallery)
    - Title
    - Category badge
-   - Ward number + distance (e.g., "Ward 25 • 1.2 km away")
+   - Ward number + distance (e.g., "Ward 9 • 1.2 km away")
    - "Chat" button (opens messaging drawer)
    - View count (bottom right corner)
 4. Infinite scroll pagination (load 20 items per page)
@@ -1287,7 +1369,7 @@ LIMIT 20 OFFSET $page * 20
 - **HomeAnchorDialog**: Two-step stepper dialog (Location → Details), supports `editMode`
 - **HomeAnchorPage**: Full-page wrapper used at `/setup-location` for onboarding
 - **LocationStatusCard**: Shows saved address, Mapbox thumbnail, distance/ward info; triggers edit dialog
-- **WardInfoCard**: Inline info about the selected Kollam ward
+- **WardInfoCard**: Inline info about the selected Piravom ward
 
 **Anti-Abuse Measures**:
 - One household record per user (upsert by `user_id`)
@@ -1451,6 +1533,96 @@ $$ LANGUAGE sql;
 - Decorative gradient backgrounds per portal theme
 - Footer links to switch between login portals
 - Terms of Service and Privacy Policy links
+
+---
+
+### 4.9 Admin Command Center Module (v1.3)
+
+#### FR-AM-001: Admin Authentication & Route Protection
+**Priority**: Critical  
+**Description**: All `/admin/*` routes (except `/admin/login`) must be accessible only to users with `role = 'admin'`.
+
+**Acceptance Criteria**:
+1. Next.js middleware intercepts every request to `/admin/*`
+2. If no session exists → redirect to `/admin/login`
+3. If session exists but `profiles.role ≠ 'admin'` → redirect to `/admin/login` with error
+4. Admin login page at `/admin/login` uses zinc-950 dark theme with emerald accents (no purple)
+5. "Fill MVP demo credentials" helper button auto-fills `admin@waste.com` / `waste@123`
+6. On successful login, Supabase Auth sets session; callback redirects to `/admin/dashboard`
+
+**Security**:
+- RLS policies on `admin_logs` and `worker_assignments` restrict INSERT/SELECT to `role = 'admin'`
+- Service-role key never exposed to client (admin APIs use server-side Supabase client)
+
+#### FR-AM-002: Overview Dashboard
+**Priority**: High  
+**Description**: Admin dashboard displays live KPI metrics and trend charts on a single screen.
+
+**Acceptance Criteria**:
+1. Page at `/admin/dashboard` loads within 2 seconds
+2. **KPI Cards** (4 cards, parallel-fetched):
+   - Total Users (from `profiles` count)
+   - Active Workers (`role = 'worker'` count)
+   - Pending Signals (`status = 'pending'` count)
+   - Revenue Estimate (`SUM(amount)` from `user_payments WHERE status = 'paid'`, formatted as ₹)
+3. **Trend Chart** (Recharts `LineChart`): 7-day predicted vs actual collection volume; two lines (emerald = actual, sky = predicted)
+4. **Waste Type Donut** (Recharts `PieChart`): Percentage breakdown of signals by waste type (wet/dry/recyclable/e-waste/hazardous)
+5. **Ward Coverage** progress bars: each of 19 wards shows household coverage percentage
+6. **Recent Audit Feed**: Last 10 entries from `admin_logs` (action type + timestamp)
+7. API: `GET /api/admin/stats` — server-side query with parallel `Promise.all` for all metrics
+
+#### FR-AM-003: User Management with Role Escalation
+**Priority**: High  
+**Description**: Admin can search, filter, promote, and assign workers from a paginated user table.
+
+**Acceptance Criteria**:
+1. Page at `/admin/users` shows a data table (20 rows/page)
+2. **Search**: Full-text search on `full_name` and `phone` (Supabase `ilike`)
+3. **Role Filter**: Dropdown (All / citizen / worker / admin)
+4. **Table Columns**: Avatar initials, Name, Phone, Role badge, Ward, Verified status, Joined date, Actions
+5. **Promote Action**:
+   - Opens shadcn `Dialog` with Select component (citizen → worker → admin)
+   - On confirm: `PATCH /api/admin/users` with `{ action: 'set_role', userId, role }`
+   - Updates `profiles.role`; inserts row in `admin_logs` with `old_value` and `new_value` JSONB
+6. **Assign Ward Action**:
+   - Opens `Dialog` with ward number input (1–19) and Kerala district dropdown (14 districts)
+   - On confirm: `PATCH /api/admin/users` with `{ action: 'assign_ward', userId, wardNumber, district }`
+   - Upserts `worker_assignments`; inserts row in `admin_logs`
+7. Pagination with prev/next controls; total count displayed
+
+#### FR-AM-004: Geospatial Intelligence Map
+**Priority**: High  
+**Description**: Admin can view a real-time heatmap of waste signals, ML predictions, and household locations overlaid on a dark Leaflet map.
+
+**Acceptance Criteria**:
+1. Page at `/admin/map` renders Leaflet map (CartoDB DarkMatter tiles) client-side only (dynamic import, `ssr: false`)
+2. **Layer Toggles** (three independent checkboxes):
+   - **Live Signals** (amber `CircleMarker`, radius scaled by `intensity`): Real collection signals from `signals` table
+   - **ML Predictions** (deep-red dashed `CircleMarker`, `dashArray: '4 2'`): Predicted high-generation locations
+   - **Households** (sky blue if not waste-ready, emerald green if `waste_ready = true`): Household anchor points
+3. **Popups**: Each marker has a popup with id, ward, status/volume/confidence, waste types
+4. **Right Panel**: Legend cards, top-5 hotspot wards (by signal density), 4 ML prediction summary cards
+5. **District Filter**: Dropdown with all 14 Kerala districts; filters API response
+6. **Real-Time Polling**: `setInterval` every 30 seconds re-fetches `GET /api/admin/hotspots`
+7. **Map Center**: Auto-centres on Piravom (9.9943°N, 76.5373°E) or centroid of fetched data
+8. API: `GET /api/admin/hotspots` returns `{ layers: { signals, households, mlPredictions, workers }, topWards, center }`
+
+**ML Prediction Layer (simulation)**:
+- Generated server-side in `/api/admin/hotspots` based on signal frequency per ward
+- Wards with >2 signals get a prediction point offset by 150–300m
+- Confidence score: `(signalCount / maxCount) * 100`, intensity: `signalCount / maxCount`
+- Predicted volume: `signalCount * 2.5 kg` (linear approximation)
+
+#### FR-AM-005: Audit Log Viewer
+**Priority**: Medium  
+**Description**: Admin can review all role escalation and ward assignment actions in a chronological log.
+
+**Acceptance Criteria**:
+1. Page at `/admin/logs` displays `admin_logs` table (newest first)
+2. Columns: Timestamp, Admin who acted, Action Type, Target User, Old Value (JSONB pretty-printed), New Value (JSONB pretty-printed)
+3. Filter by `action_type` (all / role_change / ward_assignment)
+4. Entries are read-only (no delete/edit — immutable audit trail)
+5. Admin-only RLS ensures no other role can access this page or API
 
 ---
 
@@ -1634,6 +1806,16 @@ $$ LANGUAGE sql;
 7. **offline_sync_queue**: PWA offline operation queue
 8. **public_reports**: Citizen blackspot reports with spatial location (migration 00005)
 9. **user_payments**: Municipal fee tracking ₹50/month for SUCHITWA Mission (migration 00005)
+10. **admin_logs**: Immutable admin audit trail for all role/ward changes (migration 00007)
+11. **worker_assignments**: Worker-to-ward mapping for fleet management (migration 00007)
+
+**New Enums (Migration 00007)**:
+- No new enum types — migration 00007 uses plain `TEXT` for `action_type` to allow flexible audit categories
+
+**New Indexes (Migration 00007)**:
+- B-tree index on `admin_logs.admin_id` (fast lookup of actions by admin)
+- B-tree index on `admin_logs.target_user_id` (fast lookup of actions against a user)
+- Unique constraint on `worker_assignments.worker_id` (one ward per worker)
 
 **New Enums (Migration 00005)**:
 - `verification_status`: pending | verified | rejected
@@ -1645,6 +1827,10 @@ $$ LANGUAGE sql;
 - GIST index on `households.location` (`households_location_gist_idx`)
 - B-tree index on `households.ward_number`
 - Partial index on `households.waste_ready WHERE waste_ready = true` (worker pickup queue)
+
+**Database Functions (Admin — Migration 00007)**:
+- `get_household_density(cell_size_meters)` — Grid density choropleth for admin map
+- `get_waste_hotspots(p_ward, p_district)` — K-Means signal clustering for heatmap layer
 
 **Database Functions (Citizen Layer)**:
 - `anchor_household(household_id, worker_id, verified, rejection_reason)` — Worker verification
@@ -1691,6 +1877,15 @@ apikey: {NEXT_PUBLIC_SUPABASE_ANON_KEY}
 | GET | `/api/reports/blackspot` | Get user's submitted reports |
 | GET | `/api/payments/status` | Get payment status and history |
 | POST | `/api/payments/status` | Initiate payment (placeholder) |
+
+**Admin Command Center Endpoints (v1.3)**:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/stats` | KPI aggregation — users, workers, signals, revenue, waste-type breakdown, 7-day trend |
+| GET | `/api/admin/users` | Paginated user list (query: `search`, `role`, `page`, `limit`) |
+| PATCH | `/api/admin/users` | `action: set_role` (role escalation) or `action: assign_ward` (fleet assignment); writes to `admin_logs` |
+| GET | `/api/admin/hotspots` | Map layers: `signals`, `households`, `mlPredictions`, `workers`; returns `topWards` + `center` |
 
 **Authentication Endpoints**:
 
@@ -1745,12 +1940,14 @@ apikey: {NEXT_PUBLIC_SUPABASE_ANON_KEY}
 - Decorative blur circles in background
 - Links to register and forgot password
 
-*Admin Login (`/admin/login`)*:
-- Dark purple/slate gradient background
-- "Administrator Portal" badge with Shield icon
-- Purple accent color scheme
+*Admin Login (`/admin/login`)* (updated v1.3):
+- Zinc-950 dark background (full-page dark canvas — no purple gradient)
+- "Administrator Portal" badge with `KeyRound` icon (lucide-react)
+- Emerald-500 accent for submit button and active states
+- "Fill MVP demo credentials" dashed helper button (auto-fills `admin@waste.com` / `waste@123`)
+- Email/password form with show/hide toggle
 - Role verification prevents non-admin access
-- Links to citizen/worker login portals
+- Links to citizen/worker login portals at bottom
 
 *Worker Login (`/worker/login`)*:
 - Orange/amber dark gradient background
@@ -2043,7 +2240,7 @@ test('complete waste collection flow', async ({ page }) => {
 ### 12.5 User Acceptance Testing (UAT)
 
 **Participants**:
-- 50 pilot households in Ward 25 (Asramam, Kollam)
+- 50 pilot households in Ward 9 (Piravom)
 - 10 HKS workers from Asramam ward
 - 5 municipal administrators
 
@@ -2104,6 +2301,9 @@ psql $DATABASE_URL -f supabase/migrations/00001_initial_schema.sql
 psql $DATABASE_URL -f supabase/migrations/00002_rls_policies.sql
 psql $DATABASE_URL -f supabase/migrations/00003_functions.sql
 psql $DATABASE_URL -f supabase/migrations/00004_realtime.sql
+psql $DATABASE_URL -f supabase/migrations/00005_citizen_layer.sql
+psql $DATABASE_URL -f supabase/migrations/00006_home_anchor.sql
+psql $DATABASE_URL -f supabase/migrations/00007_admin.sql
 ```
 
 **Zero-Downtime Migrations**:
@@ -2196,11 +2396,11 @@ Sentry.init({
 
 **Tier 2 - Municipal Help Desk**:
 - Phone: 1800-XXX-XXXX (toll-free, 9 AM - 6 PM IST)
-- Email: support@nirman.kollam.gov.in
+- Email: support@nirman.piravom.gov.in
 - WhatsApp: +91-XXXXX-XXXXX (automated chatbot + human escalation)
 
 **Tier 3 - Technical Support**:
-- Email: tech@nirman.kollam.gov.in (for admins, workers)
+- Email: tech@nirman.piravom.gov.in (for admins, workers)
 - Response SLA: 
   - Critical (system down): 15 minutes
   - High (major feature broken): 2 hours
@@ -2250,9 +2450,9 @@ Sentry.init({
 
 **Implementation**:
 - Consent checkboxes during registration: "I agree to share my location for waste collection coordination"
-- Privacy policy page: https://nirman.kollam.gov.in/privacy
+- Privacy policy page: https://nirman.piravom.gov.in/privacy
 - Account deletion flow: Profile → Settings → Delete Account → Confirm (30-day grace period)
-- DPO contact: dpo@nirman.kollam.gov.in
+- DPO contact: dpo@nirman.piravom.gov.in
 
 #### Solid Waste Management Rules, 2016
 **Requirements**:
@@ -2344,13 +2544,18 @@ Sentry.init({
 - **PostGIS**: PostgreSQL extension for geographic information systems
 - **RLS**: Row-Level Security (database access control)
 - **PWA**: Progressive Web Application (installable web app)
+- **Admin Command Center**: Admin portal (`/admin/*`) introduced in v1.3 with KPI dashboards, heatmaps, user management, audit logs
+- **admin_logs**: Immutable database table recording every role escalation and ward assignment
+- **worker_assignments**: Database table mapping each worker to a ward and district for fleet management
+- **ML Prediction Layer**: Server-side simulated machine-learning hotspot overlay on the admin geospatial map
+- **Hotspot**: Ward or geographic cluster with above-average waste signal density, identified via PostGIS ST_ClusterKMeans
 
 ### Appendix B: References
 
 1. Kerala SUCHITWA Mission. (2023). *Solid Waste Management Guidelines*. https://suchitwa.kerala.gov.in
 2. HARITHA KERALA Mission. (2024). *Green Kerala Action Plan*. https://harithakeralam.gov.in
 3. Ministry of Housing and Urban Affairs. (2016). *Solid Waste Management Rules*. https://mohua.gov.in
-4. Kollam Municipal Corporation. (2025). *Ward Boundary GIS Data*. OpenStreetMap contributors.
+4. Piravom Grama Panchayat. (2025). *Ward Boundary GIS Data*. OpenStreetMap contributors.
 5. PostgreSQL Documentation. (2024). *PostGIS 3.4 Reference*. https://postgis.net/docs/
 6. Supabase Documentation. (2024). *Realtime & Database Guide*. https://supabase.com/docs
 7. GROQ. (2024). *Vision Language Models API*. https://console.groq.com/docs
@@ -2360,13 +2565,16 @@ Sentry.init({
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | Feb 19, 2026 | Development Team | Initial SRS document |
+| 1.1 | Feb 19, 2026 | Development Team | Citizen Layer: fee management, blackspot reporting, verification banner |
+| 1.2 | Feb 20, 2026 | Development Team | Home Anchor System: GPS pin-drop, QR code removal, Digital Bell |
+| 1.3 | Feb 20, 2026 | Development Team | Admin Command Center: secure portal, KPI dashboard, user management, PostGIS heatmap with ML predictions, audit logs |
 
 ---
 
 **End of Software Requirements Specification**
 
 **Approval Signatures**:
-- ___________ (Municipal Commissioner, Kollam Corporation)
+- ___________ (Municipal Commissioner, Piravom Panchayat)
 - ___________ (Project Manager, Nirman Development Team)
 - ___________ (Technical Architect)
 - ___________ (SUCHITWA Mission Coordinator)
