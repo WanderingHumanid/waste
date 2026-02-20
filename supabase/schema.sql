@@ -606,7 +606,48 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
+-- Find nearby households with waste_ready=true
+DROP FUNCTION IF EXISTS find_nearby_waste_ready_households(double precision, double precision, double precision, integer);
+CREATE OR REPLACE FUNCTION find_nearby_waste_ready_households(
+  worker_lng DOUBLE PRECISION,
+  worker_lat DOUBLE PRECISION,
+  radius_meters DOUBLE PRECISION DEFAULT 2000,
+  max_results INTEGER DEFAULT 50
+)
+RETURNS TABLE (
+  household_id UUID,
+  user_id UUID,
+  nickname TEXT,
+  manual_address TEXT,
+  ward_number INTEGER,
+  waste_ready BOOLEAN,
+  lat DOUBLE PRECISION,
+  lng DOUBLE PRECISION,
+  distance_meters DOUBLE PRECISION
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    h.id as household_id,
+    h.user_id,
+    h.nickname,
+    h.manual_address,
+    h.ward_number,
+    h.waste_ready,
+    ST_Y(h.location::geometry) as lat,
+    ST_X(h.location::geometry) as lng,
+    ST_Distance(h.location::geography, ST_SetSRID(ST_MakePoint(worker_lng, worker_lat), 4326)::geography) as distance_meters
+  FROM households h
+  WHERE 
+    h.waste_ready = true 
+    AND ST_DWithin(h.location::geography, ST_SetSRID(ST_MakePoint(worker_lng, worker_lat), 4326)::geography, radius_meters)
+  ORDER BY distance_meters ASC
+  LIMIT max_results;
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
 -- Find nearest households
+DROP FUNCTION IF EXISTS find_nearest_households(double precision, double precision, double precision, integer);
 CREATE OR REPLACE FUNCTION find_nearest_households(
   worker_lng DOUBLE PRECISION,
   worker_lat DOUBLE PRECISION,
@@ -671,6 +712,36 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Verify worker proximity to household
+DROP FUNCTION IF EXISTS verify_worker_proximity(uuid, double precision, double precision, double precision);
+CREATE OR REPLACE FUNCTION verify_worker_proximity(
+  p_household_id UUID,
+  p_worker_lng DOUBLE PRECISION,
+  p_worker_lat DOUBLE PRECISION,
+  p_max_distance_meters DOUBLE PRECISION DEFAULT 50
+)
+RETURNS TABLE (
+  is_within_range BOOLEAN,
+  distance_meters DOUBLE PRECISION
+) AS $$
+DECLARE
+  v_household_location GEOGRAPHY;
+  v_distance DOUBLE PRECISION;
+BEGIN
+  -- Get household location
+  SELECT location INTO v_household_location FROM households WHERE id = p_household_id;
+  
+  IF v_household_location IS NULL THEN
+    RETURN NEXT;
+  END IF;
+
+  -- Calculate distance
+  v_distance := ST_Distance(v_household_location, ST_SetSRID(ST_MakePoint(p_worker_lng, p_worker_lat), 4326)::geography);
+  
+  RETURN QUERY SELECT (v_distance <= p_max_distance_meters), v_distance;
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
 -- Get district details
 CREATE OR REPLACE FUNCTION get_district_details(p_district_code VARCHAR(3))
 RETURNS JSONB AS $$
@@ -728,6 +799,30 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 DROP TRIGGER IF EXISTS profile_role_change_log ON profiles;
 CREATE TRIGGER profile_role_change_log AFTER UPDATE ON profiles FOR EACH ROW EXECUTE FUNCTION log_profile_role_change();
 
+-- Sync households.waste_ready with signals status
+CREATE OR REPLACE FUNCTION sync_household_waste_ready()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' AND NEW.status = 'pending' THEN
+    UPDATE households SET waste_ready = true WHERE id = NEW.household_id;
+  ELSIF TG_OP = 'UPDATE' THEN
+    -- If marked collected, cancelled or rejected, clear the flag
+    IF NEW.status IN ('collected', 'cancelled') AND OLD.status NOT IN ('collected', 'cancelled') THEN
+      UPDATE households SET waste_ready = false WHERE id = NEW.household_id;
+    -- If reverted to pending, set the flag
+    ELSIF NEW.status = 'pending' AND OLD.status != 'pending' THEN
+      UPDATE households SET waste_ready = true WHERE id = NEW.household_id;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trg_sync_waste_ready ON signals;
+CREATE TRIGGER trg_sync_waste_ready
+AFTER INSERT OR UPDATE ON signals
+FOR EACH ROW EXECUTE FUNCTION sync_household_waste_ready();
+
 -- ============================================================
 -- SECTION 8: REALTIME
 -- ============================================================
@@ -743,7 +838,9 @@ DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public_reports; EXCEPT
 -- ============================================================
 
 INSERT INTO storage.buckets (id, name, public) VALUES ('reports', 'reports', true) ON CONFLICT (id) DO NOTHING;
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+-- Note: RLS on storage.objects is often managed by Supabase. 
+-- If you need to enable it manually, do so via the Supabase Dashboard.
 
 DROP POLICY IF EXISTS "Public Access to Reports Bucket" ON storage.objects;
 CREATE POLICY "Public Access to Reports Bucket" ON storage.objects FOR SELECT USING (bucket_id = 'reports');
