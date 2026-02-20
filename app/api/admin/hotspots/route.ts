@@ -120,24 +120,110 @@ export async function GET(request: NextRequest) {
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
 
-    // ML Prediction Layer — Generate simulated predictions based on historical density
-    // In production: replace with actual ML model output (e.g., Prophet / ARIMA predictions)
+    // ML Prediction Layer — Data-driven predictions based on historical signal patterns
+    // Analyze historical signals to predict future hotspots
     const piravomCenter = { lat: 9.9943, lng: 76.5373 }
-    const mlPredictions = Array.from({ length: 12 }, (_, i) => {
-      const angle = (i / 12) * Math.PI * 2
-      const radius = 0.005 + Math.random() * 0.012
-      const intensity = 0.4 + Math.random() * 0.6
-      return {
-        id: `pred_${i}`,
-        lat: piravomCenter.lat + Math.sin(angle) * radius,
-        lng: piravomCenter.lng + Math.cos(angle) * radius,
-        intensity,
-        predictedVolume: Math.round(intensity * 85),
-        confidence: Math.round(70 + Math.random() * 25),
-        peakHour: `${8 + Math.floor(Math.random() * 4)}:00 – ${10 + Math.floor(Math.random() * 4)}:00`,
-        type: 'ml_prediction',
+    
+    // Get historical signal data for prediction (last 30 days)
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    
+    const { data: historicalSignals } = await supabase
+      .from('signals')
+      .select(`
+        id,
+        created_at,
+        households!inner(
+          ward_number,
+          location
+        )
+      `)
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .limit(500)
+
+    // Build ward-level frequency map from historical data
+    const wardFrequency: Record<number, { count: number; avgHour: number; locations: { lat: number; lng: number }[] }> = {}
+    
+    ;(historicalSignals || []).forEach((sig: Record<string, unknown>) => {
+      const hh = Array.isArray(sig.households) ? sig.households[0] : sig.households as Record<string, unknown> | null
+      if (!hh) return
+      const ward = hh.ward_number as number | null
+      if (!ward) return
+      
+      const coords = parseLocation(hh.location)
+      const hour = new Date(sig.created_at as string).getHours()
+      
+      if (!wardFrequency[ward]) {
+        wardFrequency[ward] = { count: 0, avgHour: 0, locations: [] }
       }
+      wardFrequency[ward].count++
+      wardFrequency[ward].avgHour += hour
+      if (coords) wardFrequency[ward].locations.push(coords)
     })
+
+    // Calculate predictions based on historical patterns
+    const mlPredictions = Object.entries(wardFrequency)
+      .filter(([, data]) => data.count >= 1) // Only wards with data
+      .slice(0, 12) // Top 12 wards
+      .map(([ward, data]) => {
+        // Calculate centroid of historical locations
+        const avgLat = data.locations.length > 0 
+          ? data.locations.reduce((sum, l) => sum + l.lat, 0) / data.locations.length
+          : piravomCenter.lat + (Math.random() - 0.5) * 0.02
+        const avgLng = data.locations.length > 0
+          ? data.locations.reduce((sum, l) => sum + l.lng, 0) / data.locations.length
+          : piravomCenter.lng + (Math.random() - 0.5) * 0.02
+        
+        const avgHour = Math.round(data.avgHour / data.count)
+        
+        // Intensity based on frequency relative to max
+        const maxCount = Math.max(...Object.values(wardFrequency).map(d => d.count))
+        const intensity = data.count / (maxCount || 1)
+        
+        // Calculate day-of-week pattern (weekend boost)
+        const dayOfWeek = new Date().getDay()
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+        const dayMultiplier = isWeekend ? 1.3 : 1.0
+        
+        // Confidence based on data availability
+        const confidence = Math.min(95, 50 + (data.count * 5))
+        
+        return {
+          id: `pred_ward_${ward}`,
+          lat: avgLat,
+          lng: avgLng,
+          intensity: Math.min(1, intensity * dayMultiplier),
+          predictedVolume: Math.round(data.count * dayMultiplier * 0.3), // Next day prediction
+          confidence,
+          peakHour: `${avgHour}:00 – ${avgHour + 2}:00`,
+          type: 'ml_prediction',
+          ward: parseInt(ward),
+          historicalCount: data.count,
+        }
+      })
+
+    // If no historical data, provide smart defaults for Piravom wards
+    const fallbackPredictions = mlPredictions.length === 0
+      ? Array.from({ length: 10 }, (_, i) => {
+          const angle = (i / 10) * Math.PI * 2
+          const radius = 0.003 + (i % 3) * 0.004
+          const dayOfWeek = new Date().getDay()
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+          const baseIntensity = isWeekend ? 0.6 : 0.4
+          return {
+            id: `pred_default_${i + 1}`,
+            lat: piravomCenter.lat + Math.sin(angle) * radius,
+            lng: piravomCenter.lng + Math.cos(angle) * radius,
+            intensity: baseIntensity + (i % 4) * 0.1,
+            predictedVolume: isWeekend ? 25 : 15,
+            confidence: 60,
+            peakHour: `${8 + (i % 4)}:00 – ${10 + (i % 4)}:00`,
+            type: 'ml_prediction',
+            ward: i + 1,
+            historicalCount: 0,
+          }
+        })
+      : mlPredictions
 
     // Worker markers
     const workerMarkers = (workers || []).map((w) => {
@@ -175,7 +261,7 @@ export async function GET(request: NextRequest) {
       layers: {
         signals: signalHeatmap,
         households: householdPoints,
-        mlPredictions,
+        mlPredictions: fallbackPredictions,
         workers: workerMarkers,
       },
       topWards,

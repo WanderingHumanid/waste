@@ -47,13 +47,14 @@ export function TopNavbar() {
   useEffect(() => {
     async function fetchUser() {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        // Use getUser() instead of getSession() for proper server validation
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
         
-        if (session?.user) {
+        if (authUser && !authError) {
           const { data: profile } = await supabase
             .from('profiles')
             .select('id, full_name, green_credits, role')
-            .eq('id', session.user.id)
+            .eq('id', authUser.id)
             .single()
 
           if (profile) {
@@ -87,7 +88,6 @@ export function TopNavbar() {
 
   const navLinks = [
     { href: '/dashboard', label: 'Dashboard' },
-    { href: '/segregation', label: 'Segregation' },
     { href: '/marketplace', label: 'Marketplace' },
     { href: '/chat', label: 'Chat' },
     { href: '/waste', label: 'Waste' },
@@ -172,21 +172,6 @@ export function TopNavbar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium">{user?.full_name || 'User'}</p>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs capitalize">
-                      {user?.role || 'citizen'}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Coins className="w-3 h-3" />
-                      {user?.green_credits || 0}
-                    </span>
-                  </div>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
                 <Link href="/profile" className="cursor-pointer">
                   <User className="w-4 h-4 mr-2" />

@@ -72,6 +72,14 @@ const NAV: NavItem[] = [
     ],
   },
   {
+    label: 'Analytics',
+    icon: BarChart3,
+    children: [
+      { label: 'Performance KPIs', href: '/admin/performance' },
+      { label: 'ML Predictions', href: '/admin/predictions' },
+    ],
+  },
+  {
     label: 'Audit Logs',
     href: '/admin/logs',
     icon: FileText,
@@ -108,14 +116,23 @@ export function AdminSidebar({ className }: AdminSidebarProps) {
         className
       )}
     >
-      {/* Brand */}
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-zinc-800">
-        <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center flex-shrink-0">
-          <Leaf className="w-4 h-4 text-white" />
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-white tracking-tight">Nirman Admin</p>
-          <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Command Center</p>
+      {/* Brand & Quick Actions */}
+      <div className="border-b border-zinc-800">
+        <div className="flex items-center gap-3 px-5 py-4">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center flex-shrink-0">
+            <Leaf className="w-4 h-4 text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-white tracking-tight">Nirman Admin</p>
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Command Center</p>
+          </div>
+          <button className="relative p-2 rounded-lg hover:bg-zinc-800 transition-colors">
+            <Bell className="w-4 h-4 text-zinc-400" />
+            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-rose-500" />
+          </button>
+          <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center">
+            <span className="text-[10px] font-bold text-white">A</span>
+          </div>
         </div>
       </div>
 

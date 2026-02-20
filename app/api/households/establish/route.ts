@@ -282,7 +282,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PATCH endpoint to toggle waste_ready status
+// PATCH endpoint to toggle waste_ready status (Digital Bell)
 export async function PATCH(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -298,7 +298,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { waste_ready } = body
+    const { waste_ready, waste_types } = body
 
     if (typeof waste_ready !== 'boolean') {
       return NextResponse.json(
@@ -307,12 +307,21 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    // Validate waste_types if provided
+    const validWasteTypes = ['wet', 'dry', 'recyclable', 'hazardous', 'e-waste', 'mixed']
+    const cleanedWasteTypes = Array.isArray(waste_types) 
+      ? waste_types.filter(t => validWasteTypes.includes(t))
+      : ['mixed']
+
     // Update waste_ready status
     const { data, error } = await supabase
       .from('households')
-      .update({ waste_ready })
+      .update({ 
+        waste_ready,
+        updated_at: new Date().toISOString(),
+      })
       .eq('user_id', user.id)
-      .select('id, waste_ready')
+      .select('id, waste_ready, ward_number, district, nickname')
       .single()
 
     if (error) {
@@ -323,12 +332,88 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    // === CRITICAL: Create or update signal record ===
+    // This is what makes the signal visible to admin and workers
+    if (waste_ready) {
+      // Check if there's already an active signal for this household
+      const { data: existingSignal } = await supabase
+        .from('signals')
+        .select('id')
+        .eq('household_id', data.id)
+        .in('status', ['pending', 'acknowledged'])
+        .single()
+
+      if (!existingSignal) {
+        // Create new signal with waste types
+        const { error: signalError } = await supabase
+          .from('signals')
+          .insert({
+            household_id: data.id,
+            user_id: user.id,
+            status: 'pending',
+            waste_types: cleanedWasteTypes,
+            created_at: new Date().toISOString(),
+          })
+
+        if (signalError) {
+          console.error('Error creating signal:', signalError)
+          // Non-blocking - household is already updated
+        } else {
+          console.log('Signal created for household:', data.id, 'waste types:', cleanedWasteTypes)
+        }
+      } else {
+        // Update existing signal with new waste types
+        await supabase
+          .from('signals')
+          .update({ waste_types: cleanedWasteTypes, updated_at: new Date().toISOString() })
+          .eq('id', existingSignal.id)
+      }
+    } else {
+      // User cancelled - update any pending signals to cancelled
+      const { error: cancelError } = await supabase
+        .from('signals')
+        .update({ 
+          status: 'cancelled',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('household_id', data.id)
+        .in('status', ['pending', 'acknowledged'])
+
+      if (cancelError) {
+        console.error('Error cancelling signals:', cancelError)
+      }
+    }
+
+    // Broadcast to ward-specific channel for worker radar
+    // This supplements the pg_notify trigger for real-time updates
+    if (data.ward_number) {
+      const channel = `ward:${data.district || 'Ernakulam'}:${data.ward_number}`
+      await supabase
+        .channel(channel)
+        .send({
+          type: 'broadcast',
+          event: 'digital_bell',
+          payload: {
+            household_id: data.id,
+            waste_ready: data.waste_ready,
+            nickname: data.nickname,
+            ward_number: data.ward_number,
+            timestamp: new Date().toISOString(),
+          },
+        })
+        .catch(console.error) // Non-blocking
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         household_id: data.id,
         waste_ready: data.waste_ready,
+        ward_number: data.ward_number,
       },
+      message: waste_ready 
+        ? 'Digital Bell activated! Workers in your ward have been notified.'
+        : 'Waste ready status cancelled.',
     })
   } catch (error) {
     console.error('Toggle waste_ready error:', error)

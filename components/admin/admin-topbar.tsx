@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { usePathname } from 'next/navigation'
 
 const ROUTE_LABELS: Record<string, string> = {
-  '/admin/dashboard': 'Overview',
+  '/admin/dashboard': 'Command Center',
   '/admin/users': 'User Management',
   '/admin/map': 'Geospatial Intelligence',
   '/admin/fleet': 'Fleet Dispatch',

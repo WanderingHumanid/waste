@@ -14,7 +14,7 @@ interface NavItem {
 
 export function BottomNav() {
   const pathname = usePathname()
-  
+
   // Remove locale prefix from pathname for comparison
   const path = pathname.replace(/^\/(en|ml)/, '')
 

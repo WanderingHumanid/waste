@@ -24,6 +24,8 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 
 const KERALA_DISTRICTS = [
   'Ernakulam', 'Thiruvananthapuram', 'Kollam', 'Pathanamthitta', 'Alappuzha',
@@ -95,7 +97,38 @@ export default function AdminMapPage() {
     fetchData()
     // Auto-refresh every 30s for real-time updates
     const interval = setInterval(fetchData, 30000)
-    return () => clearInterval(interval)
+
+    // Real-time subscription for signals
+    const supabase = createClient()
+    const channel = supabase
+      .channel('admin-map-signals')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'signals' },
+        (payload) => {
+          console.log('Map: New signal received:', payload)
+          fetchData() // Refresh map data
+          toast.info('New Signal', {
+            description: 'Map updated with new collection request',
+          })
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'signals' },
+        () => fetchData()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'households' },
+        () => fetchData()
+      )
+      .subscribe()
+
+    return () => {
+      clearInterval(interval)
+      supabase.removeChannel(channel)
+    }
   }, [fetchData])
 
   const toggleLayer = (layer: LayerKey) => {
