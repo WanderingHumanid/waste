@@ -15,15 +15,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { 
-  Truck, 
-  Map, 
-  History, 
-  Settings, 
-  LogOut, 
+import {
+  Truck,
+  Map,
+  History,
+  Settings,
+  LogOut,
   Menu,
   X,
-  Wallet
+  Wallet,
+  BarChart3,
+  Navigation
 } from 'lucide-react'
 
 interface WorkerProfile {
@@ -37,9 +39,10 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
-  
+
   const [worker, setWorker] = useState<WorkerProfile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [debugStatus, setDebugStatus] = useState('Initializing...')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const isLoginPage = pathname === '/worker/login'
@@ -52,30 +55,49 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
     }
 
     async function checkWorker() {
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        router.push('/worker/login')
-        return
+      try {
+        setDebugStatus('Fetching user session...')
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+        if (authError || !user) {
+          setDebugStatus('No user found. Redirecting to login...')
+          router.push('/worker/login')
+          return
+        }
+
+        setDebugStatus(`User found (${user.id}). Fetching profile...`)
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, full_name, role, ward_number')
+          .eq('id', user.id)
+          .single()
+
+        if (profileError) {
+          setDebugStatus(`Error fetching profile: ${profileError.message || profileError.code}. Redirecting...`)
+          router.push('/worker/login')
+          return
+        }
+
+        if (!profile || (profile.role !== 'worker' && profile.role !== 'hks_worker' && profile.role !== 'admin')) {
+          setDebugStatus(`Unauthorized role: ${profile?.role}. Redirecting...`)
+          router.push('/worker/login')
+          return
+        }
+
+        setDebugStatus('Profile verified. Dashboard ready.')
+        setWorker(profile)
+      } catch (error) {
+        setDebugStatus(`Unexpected error: ${error instanceof Error ? error.message : 'Unknown'}`)
+        console.error('Worker auth check failed:', error)
+        try { router.push('/worker/login') } catch (e) { }
+      } finally {
+        setTimeout(() => setLoading(false), 500) // Ensure UI has time to update
       }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id, full_name, role, ward_number')
-        .eq('id', user.id)
-        .single()
-
-      if (!profile || (profile.role !== 'worker' && profile.role !== 'hks_worker' && profile.role !== 'admin')) {
-        router.push('/worker/login')
-        return
-      }
-
-      setWorker(profile)
-      setLoading(false)
     }
 
     checkWorker()
-  }, [router, supabase, isLoginPage])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoginPage, router])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -84,6 +106,8 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
 
   const navItems = [
     { href: '/worker/dashboard', label: 'Pickup Radar', icon: Map },
+    { href: '/worker/hotspots', label: 'Waste Hotspots', icon: BarChart3 },
+    { href: '/worker/routing', label: 'Route Navigation', icon: Navigation },
     { href: '/worker/history', label: 'History', icon: History },
     { href: '/worker/earnings', label: 'Earnings', icon: Wallet },
     { href: '/worker/settings', label: 'Settings', icon: Settings },
@@ -96,8 +120,14 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-amber-950 flex items-center justify-center">
-        <div className="text-amber-400 text-lg">Loading...</div>
+      <div className="min-h-screen bg-amber-950 flex flex-col items-center justify-center gap-4">
+        <div className="text-amber-400 text-lg font-bold">Loading...</div>
+        <div className="text-amber-200/70 text-sm font-mono max-w-md text-center px-4 py-2 bg-black/20 rounded-lg">
+          {debugStatus}
+        </div>
+        <Button variant="outline" size="sm" onClick={() => window.location.reload()} className="mt-4 border-amber-800 text-amber-500 hover:bg-amber-900">
+          Force Refresh
+        </Button>
       </div>
     )
   }

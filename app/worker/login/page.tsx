@@ -40,7 +40,7 @@ function GoogleLogo({ className }: { className?: string }) {
 export default function WorkerLoginPage() {
   const router = useRouter()
   const supabase = createClient()
-  
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -80,7 +80,6 @@ export default function WorkerLoginPage() {
 
         toast.success('Welcome back! Ready for your route.')
         router.push('/worker/dashboard')
-        router.refresh()
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')

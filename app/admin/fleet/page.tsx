@@ -20,12 +20,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { 
-  Truck, 
-  Clock, 
-  MapPin, 
-  Users, 
-  RefreshCw, 
+import {
+  Truck,
+  Clock,
+  MapPin,
+  Users,
+  RefreshCw,
   ArrowRightLeft,
   AlertTriangle,
   CheckCircle2,
@@ -67,7 +67,7 @@ interface FleetStats {
 
 export default function AdminFleetPage() {
   const supabase = createClient()
-  
+
   const [workers, setWorkers] = useState<Worker[]>([])
   const [wards, setWards] = useState<Ward[]>([])
   const [stats, setStats] = useState<FleetStats | null>(null)
@@ -105,9 +105,9 @@ export default function AdminFleetPage() {
       startOfDay.setHours(0, 0, 0, 0)
       const { data: collections } = await supabase
         .from('signals')
-        .select('worker_id')
-        .eq('status', 'picked_up')
-        .gte('picked_up_at', startOfDay.toISOString())
+        .select('assigned_to')
+        .eq('status', 'collected')
+        .gte('collected_at', startOfDay.toISOString())
 
       // Fetch active signals per ward
       const { data: activeSignals } = await supabase
@@ -118,8 +118,8 @@ export default function AdminFleetPage() {
       // Process workers
       const processedWorkers: Worker[] = (workersData || []).map(w => {
         const assignment = assignments?.find(a => a.worker_id === w.id)
-        const location = locations?.find(l => l.worker_id === w.id)
-        const workerCollections = collections?.filter(c => c.worker_id === w.id).length || 0
+        const location = locations && Array.isArray(locations) ? locations.find(l => l.worker_id === w.id) : null
+        const workerCollections = collections?.filter(c => c.assigned_to === w.id).length || 0
 
         return {
           id: w.id,
@@ -220,8 +220,8 @@ export default function AdminFleetPage() {
   const handleDeployReinforcements = async (wardNumber: number) => {
     // Find idle workers from adjacent wards
     const adjacentWards = [wardNumber - 1, wardNumber + 1].filter(w => w >= 1 && w <= 19)
-    const idleWorkers = workers.filter(w => 
-      adjacentWards.includes(w.ward_number || 0) && 
+    const idleWorkers = workers.filter(w =>
+      adjacentWards.includes(w.ward_number || 0) &&
       !w.is_active
     )
 
@@ -466,13 +466,12 @@ export default function AdminFleetPage() {
             {wards.map(ward => (
               <div
                 key={ward.ward_number}
-                className={`p-3 rounded-lg border ${
-                  ward.active_signals > 0 && ward.assigned_workers === 0
+                className={`p-3 rounded-lg border ${ward.active_signals > 0 && ward.assigned_workers === 0
                     ? 'bg-red-50 border-red-200'
                     : ward.active_signals > 0
-                    ? 'bg-amber-50 border-amber-200'
-                    : 'bg-zinc-50 border-zinc-200'
-                }`}
+                      ? 'bg-amber-50 border-amber-200'
+                      : 'bg-zinc-50 border-zinc-200'
+                  }`}
               >
                 <p className="font-medium text-sm">Ward {ward.ward_number}</p>
                 <div className="flex items-center gap-2 mt-1 text-xs">

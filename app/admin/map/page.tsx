@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -73,12 +74,25 @@ const AdminMapClient = dynamic<AdminMapClientProps>(
 type LayerKey = 'signals' | 'households' | 'mlPredictions'
 
 export default function AdminMapPage() {
+  const searchParams = useSearchParams()
   const [data, setData] = useState<HotspotData | null>(null)
   const [loading, setLoading] = useState(true)
   const [district, setDistrict] = useState('Ernakulam')
   const [activeLayers, setActiveLayers] = useState<Set<LayerKey>>(
     new Set(['signals', 'mlPredictions'])
   )
+
+  // Sync map layers when URL query params change
+  useEffect(() => {
+    const layer = searchParams.get('layer')
+    if (layer === 'hotspots') {
+      setActiveLayers(new Set(['signals']))
+    } else if (layer === 'predictions') {
+      setActiveLayers(new Set(['mlPredictions']))
+    } else {
+      setActiveLayers(new Set(['signals', 'mlPredictions'])) // Default
+    }
+  }, [searchParams])
 
   const fetchData = useCallback(async () => {
     setLoading(true)

@@ -74,9 +74,16 @@ function AdminUsersContent() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [search, setSearch] = useState('')
-  const [roleFilter, setRoleFilter] = useState<string>(searchParams.get('filter') === 'workers' ? 'worker' : searchParams.get('filter') === 'citizens' ? 'citizen' : 'all')
+  const [roleFilter, setRoleFilter] = useState<string>('all')
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+
+  // Sync roleFilter when URL query params change (e.g. clicking sidebar links)
+  useEffect(() => {
+    const filter = searchParams.get('filter')
+    setRoleFilter(filter === 'workers' ? 'worker' : filter === 'citizens' ? 'citizen' : 'all')
+    setPage(1)
+  }, [searchParams])
 
   // Role change dialog
   const [roleDialog, setRoleDialog] = useState<{ open: boolean; user: UserRow | null }>({ open: false, user: null })
@@ -111,8 +118,7 @@ function AdminUsersContent() {
   }, [page, search, roleFilter])
 
   useEffect(() => {
-    const t = setTimeout(fetchUsers, 300)
-    return () => clearTimeout(t)
+    fetchUsers()
   }, [fetchUsers])
 
   const handleRoleChange = async () => {

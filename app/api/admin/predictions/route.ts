@@ -97,52 +97,52 @@ export async function GET(request: NextRequest) {
       hourSum: number
     }> = {}
 
-    // Process signals
-    ;(historicalSignals || []).forEach((sig) => {
-      const hh = Array.isArray(sig.households) ? sig.households[0] : sig.households
-      if (!hh?.ward_number) return
-      const ward = hh.ward_number as number
+      // Process signals
+      ; (historicalSignals || []).forEach((sig) => {
+        const hh = Array.isArray(sig.households) ? sig.households[0] : sig.households
+        if (!hh?.ward_number) return
+        const ward = hh.ward_number as number
 
-      if (!wardStats[ward]) {
-        wardStats[ward] = {
-          signalCount: 0, signalsByDay: {}, totalWeightKg: 0, weightEntries: 0,
-          missedCount: 0, locations: [], avgHour: 0, hourSum: 0
-        }
-      }
-
-      wardStats[ward].signalCount++
-      const sigDate = new Date(sig.created_at)
-      const sigDay = sigDate.getDay()
-      wardStats[ward].signalsByDay[sigDay] = (wardStats[ward].signalsByDay[sigDay] || 0) + 1
-      wardStats[ward].hourSum += sigDate.getHours()
-
-      // Parse location
-      if (hh.location) {
-        try {
-          const loc = hh.location as { coordinates?: number[] }
-          if (loc.coordinates) {
-            wardStats[ward].locations.push({ lat: loc.coordinates[1], lng: loc.coordinates[0] })
+        if (!wardStats[ward]) {
+          wardStats[ward] = {
+            signalCount: 0, signalsByDay: {}, totalWeightKg: 0, weightEntries: 0,
+            missedCount: 0, locations: [], avgHour: 0, hourSum: 0
           }
-        } catch {}
-      }
-    })
+        }
 
-    // Process collection logs
-    ;(collectionLogs || []).forEach((log) => {
-      const ward = log.ward_number
-      if (!ward || !wardStats[ward]) return
-      if (log.actual_weight_kg) {
-        wardStats[ward].totalWeightKg += log.actual_weight_kg
-        wardStats[ward].weightEntries++
-      }
-    })
+        wardStats[ward].signalCount++
+        const sigDate = new Date(sig.created_at)
+        const sigDay = sigDate.getDay()
+        wardStats[ward].signalsByDay[sigDay] = (wardStats[ward].signalsByDay[sigDay] || 0) + 1
+        wardStats[ward].hourSum += sigDate.getHours()
 
-    // Process missed stops
-    ;(missedStops || []).forEach((miss) => {
-      const ward = miss.ward_number
-      if (!ward || !wardStats[ward]) return
-      wardStats[ward].missedCount++
-    })
+        // Parse location
+        if (hh.location) {
+          try {
+            const loc = hh.location as { coordinates?: number[] }
+            if (loc.coordinates) {
+              wardStats[ward].locations.push({ lat: loc.coordinates[1], lng: loc.coordinates[0] })
+            }
+          } catch { }
+        }
+      })
+
+      // Process collection logs
+      ; (collectionLogs || []).forEach((log) => {
+        const ward = log.ward_number
+        if (!ward || !wardStats[ward]) return
+        if (log.actual_weight_kg) {
+          wardStats[ward].totalWeightKg += log.actual_weight_kg
+          wardStats[ward].weightEntries++
+        }
+      })
+
+      // Process missed stops
+      ; (missedStops || []).forEach((miss) => {
+        const ward = miss.ward_number
+        if (!ward || !wardStats[ward]) return
+        wardStats[ward].missedCount++
+      })
 
     // Generate predictions for each ward
     const predictions: WardPrediction[] = []
@@ -157,8 +157,8 @@ export async function GET(request: NextRequest) {
       const avgSignalsThisDay = sameDaySignals / 4 // ~4 weeks of data
 
       // Calculate weight average
-      const avgWeightKg = stats.weightEntries > 0 
-        ? stats.totalWeightKg / stats.weightEntries 
+      const avgWeightKg = stats.weightEntries > 0
+        ? stats.totalWeightKg / stats.weightEntries
         : 2.5 // Default 2.5kg per household
 
       // Weekend adjustment (typically 20-40% more waste)
@@ -181,8 +181,8 @@ export async function GET(request: NextRequest) {
       if (weekendAvg < weekdayAvg * 0.8) trend = 'decreasing'
 
       // Calculate avg hour
-      const avgHour = stats.signalCount > 0 
-        ? Math.round(stats.hourSum / stats.signalCount) 
+      const avgHour = stats.signalCount > 0
+        ? Math.round(stats.hourSum / stats.signalCount)
         : 9
 
       // Calculate centroid
@@ -194,8 +194,8 @@ export async function GET(request: NextRequest) {
       }
 
       // Calculate missed stop rate
-      const missedStopRate = stats.signalCount > 0 
-        ? (stats.missedCount / stats.signalCount) * 100 
+      const missedStopRate = stats.signalCount > 0
+        ? (stats.missedCount / stats.signalCount) * 100
         : 0
 
       // Determine priority and extra pickups
@@ -241,7 +241,7 @@ export async function GET(request: NextRequest) {
 
     // Cache predictions
     for (const pred of predictions) {
-      await supabase
+      const { error: upsertError } = await supabase
         .from('hotspot_predictions')
         .upsert({
           ward_number: pred.wardNumber,
@@ -258,7 +258,7 @@ export async function GET(request: NextRequest) {
           centroid_lat: pred.centroid.lat,
           centroid_lng: pred.centroid.lng,
         }, { onConflict: 'ward_number,district,prediction_date' })
-        .catch(console.error)
+      if (upsertError) console.error(upsertError)
     }
 
     // Summary stats

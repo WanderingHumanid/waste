@@ -53,7 +53,7 @@ export default function DashboardPage() {
     const fetchUserData = async () => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      
+
       if (user) {
         // Get profile
         const { data: profile } = await supabase
@@ -107,22 +107,22 @@ export default function DashboardPage() {
       const response = await fetch('/api/households/establish', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           waste_ready: !data.wasteReady,
           waste_types: selectedWasteTypes,
         }),
       })
-      
+
       const result = await response.json()
-      
+
       if (result.success) {
         setData((prev) => ({
           ...prev,
           wasteReady: !prev.wasteReady,
         }))
-      
+
         toast.success(data.wasteReady ? 'Status Updated' : 'Signal Sent!', {
-          description: data.wasteReady 
+          description: data.wasteReady
             ? 'Waste ready signal cancelled.'
             : `Your collection worker has been notified for ${selectedWasteTypes.join(', ')} waste.`,
         })
@@ -139,8 +139,8 @@ export default function DashboardPage() {
   }
 
   const toggleWasteType = (typeId: string) => {
-    setSelectedWasteTypes(prev => 
-      prev.includes(typeId) 
+    setSelectedWasteTypes(prev =>
+      prev.includes(typeId)
         ? prev.filter(t => t !== typeId)
         : [...prev, typeId]
     )
@@ -194,7 +194,7 @@ export default function DashboardPage() {
               'bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950 dark:to-green-950'
             )}>
               {/* Removed verification overlay - Home Anchor mode doesn't require HKS verification */}
-              
+
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-primary">
                   <Zap className="w-6 h-6" />
@@ -341,12 +341,6 @@ export default function DashboardPage() {
                     </a>
                   </Button>
                   <Button variant="outline" className="h-auto flex-col py-4" asChild>
-                    <a href="/waste-route-optimizer">
-                      <MapPin className="w-5 h-5 mb-2" />
-                      <span className="text-xs">Route Optimization</span>
-                    </a>
-                  </Button>
-                  <Button variant="outline" className="h-auto flex-col py-4" asChild>
                     <a href="/chat">
                       <Leaf className="w-5 h-5 mb-2" />
                       <span className="text-xs">Messages</span>
@@ -376,9 +370,9 @@ export default function DashboardPage() {
           <div className="space-y-6">
             {/* Fee Tracker - Municipal Payments */}
             <FeeTracker />
-            
+
             {/* Blackspot Reporter - Public Waste Issues */}
-            <BlackspotReporter 
+            <BlackspotReporter
               onSuccess={() => {
                 toast.success('Thank you for reporting!', {
                   description: 'Municipal authorities will investigate the issue.',

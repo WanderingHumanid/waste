@@ -122,14 +122,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Notify admin about missed stop (for tracking)
-    await supabase.from('admin_logs').insert({
+    const { error: logError } = await supabase.from('admin_logs').insert({
       admin_id: null,
       action_type: 'missed_stop',
       target_user_id: user.id,
       target_entity: 'missed_stops',
       new_value: { household_id: householdId, reason, ward_number: household.ward_number },
       notes: `Worker missed collection: ${reason}`,
-    }).catch(console.error)
+    })
+    if (logError) console.error(logError)
 
     return NextResponse.json({
       success: true,
@@ -147,7 +148,7 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    
+
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
@@ -207,7 +208,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    
+
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
