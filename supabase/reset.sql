@@ -161,6 +161,7 @@ CREATE TABLE chats (
   marketplace_item_id UUID REFERENCES marketplace_items(id) ON DELETE SET NULL,
   request_hks_delivery BOOLEAN DEFAULT FALSE,
   is_read BOOLEAN DEFAULT FALSE,
+  is_deleted BOOLEAN DEFAULT FALSE,
   read_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT no_self_messaging CHECK (sender_id != receiver_id)
@@ -562,10 +563,13 @@ ALTER TABLE performance_metrics ENABLE ROW LEVEL SECURITY;
 -- STEP 7: CREATE SIMPLE RLS POLICIES (NO RECURSION!)
 -- ============================================================
 
--- Profiles: Everyone can read, users can update their own
+-- Profiles: Everyone can read, users can update their own, admins can update all
 CREATE POLICY "profiles_read" ON profiles FOR SELECT USING (true);
 CREATE POLICY "profiles_insert" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "profiles_update" ON profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "profiles_admin_update" ON profiles FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
 
 -- Households: Everyone can read, owners can modify
 CREATE POLICY "households_read" ON households FOR SELECT USING (true);
@@ -587,6 +591,7 @@ CREATE POLICY "marketplace_delete" ON marketplace_items FOR DELETE USING (auth.u
 -- Chats: Participants only
 CREATE POLICY "chats_read" ON chats FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
 CREATE POLICY "chats_insert" ON chats FOR INSERT WITH CHECK (auth.uid() = sender_id);
+CREATE POLICY "chats_update" ON chats FOR UPDATE USING (auth.uid() = sender_id);
 
 -- Delivery Tasks
 CREATE POLICY "delivery_read" ON delivery_tasks FOR SELECT USING (auth.uid() IN (requester_id, seller_id, assigned_to));

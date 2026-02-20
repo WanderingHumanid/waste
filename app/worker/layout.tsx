@@ -42,12 +42,15 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
   const [loading, setLoading] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  // Skip layout for login page
-  if (pathname === '/worker/login') {
-    return <>{children}</>
-  }
+  const isLoginPage = pathname === '/worker/login'
 
   useEffect(() => {
+    // Skip auth check for login page
+    if (isLoginPage) {
+      setLoading(false)
+      return
+    }
+
     async function checkWorker() {
       const { data: { user } } = await supabase.auth.getUser()
       
@@ -72,7 +75,7 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
     }
 
     checkWorker()
-  }, [router, supabase])
+  }, [router, supabase, isLoginPage])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -97,6 +100,11 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
         <div className="text-amber-400 text-lg">Loading...</div>
       </div>
     )
+  }
+
+  // Render login page without layout
+  if (isLoginPage) {
+    return <>{children}</>
   }
 
   return (
