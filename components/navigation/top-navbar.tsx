@@ -47,13 +47,14 @@ export function TopNavbar() {
   useEffect(() => {
     async function fetchUser() {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        // Use getUser() instead of getSession() for proper server validation
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
         
-        if (session?.user) {
+        if (authUser && !authError) {
           const { data: profile } = await supabase
             .from('profiles')
             .select('id, full_name, green_credits, role')
-            .eq('id', session.user.id)
+            .eq('id', authUser.id)
             .single()
 
           if (profile) {

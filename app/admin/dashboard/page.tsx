@@ -213,7 +213,6 @@ export default function AdminDashboardPage() {
     <div className="space-y-6 max-w-7xl">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-bold text-zinc-900">Command Center</h2>
         <p className="text-sm text-zinc-500">
           Piravom Grama Panchayat · Ernakulam District · Kerala
         </p>
