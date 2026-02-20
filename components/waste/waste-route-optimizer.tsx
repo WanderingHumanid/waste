@@ -13,6 +13,7 @@ const MapContainer = dynamic(() => import('react-leaflet').then((mod) => mod.Map
 const TileLayer = dynamic(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false })
 const CircleMarker = dynamic(() => import('react-leaflet').then((mod) => mod.CircleMarker), { ssr: false })
 const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false })
+const Tooltip = dynamic(() => import('react-leaflet').then((mod) => mod.Tooltip), { ssr: false })
 const Polyline = dynamic(() => import('react-leaflet').then((mod) => mod.Polyline), { ssr: false })
 
 const RISK_COLORS = {
@@ -234,6 +235,9 @@ export function WasteRouteOptimizer() {
                   weight: isActive ? 4 : 2,
                 }}
               >
+                <Tooltip permanent direction="top" className="bg-white/90 border-none shadow-sm text-[10px] font-bold px-1.5 py-0.5 rounded text-zinc-800 opacity-100">
+                  {zone.fill_percentage.toFixed(0)}%
+                </Tooltip>
                 <Popup className="w-80">
                   <div className="space-y-2 p-2">
                     <div>
@@ -305,6 +309,9 @@ export function WasteRouteOptimizer() {
                   weight: 1,
                 }}
               >
+                <Tooltip permanent direction="top" className="bg-white/70 border-none shadow-sm text-[10px] font-bold px-1.5 py-0.5 rounded text-zinc-600 opacity-80">
+                  {zone.fill_percentage.toFixed(0)}%
+                </Tooltip>
                 <Popup className="w-80">
                   <div className="text-xs text-zinc-500">
                     <p className="font-semibold">{zone.name}</p>
