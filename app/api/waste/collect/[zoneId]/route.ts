@@ -9,12 +9,22 @@ export async function POST(
 ) {
   try {
     const { zoneId } = await context.params
-    const engine = getWasteEngine()
-    engine.tick()
-
     const body = await request.json()
     const { amount = 100 } = body
 
+    // Household signals are not in the WasteEngine — handle separately
+    if (zoneId.startsWith('household_')) {
+      return NextResponse.json({
+        success: true,
+        message: `Household pickup confirmed for ${zoneId}`,
+        zone: null,
+        isHousehold: true,
+        timestamp: Date.now(),
+      })
+    }
+
+    const engine = getWasteEngine()
+    engine.tick()
     engine.collect(zoneId, amount)
 
     const zones = engine.getZones()

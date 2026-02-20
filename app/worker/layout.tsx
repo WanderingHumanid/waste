@@ -86,6 +86,11 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
 
         setDebugStatus('Profile verified. Dashboard ready.')
         setWorker(profile)
+
+        // Redirect /worker/dashboard to /worker/routing
+        if (pathname === '/worker/dashboard') {
+          router.replace('/worker/routing')
+        }
       } catch (error) {
         setDebugStatus(`Unexpected error: ${error instanceof Error ? error.message : 'Unknown'}`)
         console.error('Worker auth check failed:', error)
@@ -105,7 +110,6 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
   }
 
   const navItems = [
-    { href: '/worker/dashboard', label: 'Pickup Radar', icon: Map },
     { href: '/worker/hotspots', label: 'Waste Hotspots', icon: BarChart3 },
     { href: '/worker/routing', label: 'Route Navigation', icon: Navigation },
     { href: '/worker/history', label: 'History', icon: History },
@@ -143,7 +147,7 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
       <header className="sticky top-0 z-50 bg-amber-900/95 backdrop-blur border-b border-amber-800">
         <div className="flex h-14 items-center justify-between px-4 max-w-7xl mx-auto">
           {/* Logo */}
-          <Link href="/worker/dashboard" className="flex items-center gap-2">
+          <Link href="/worker/routing" className="flex items-center gap-2">
             <div className="p-1.5 bg-amber-400/20 rounded-lg">
               <Truck className="w-5 h-5 text-amber-400" />
             </div>
