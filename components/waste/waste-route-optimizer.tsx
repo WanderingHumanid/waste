@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Loader2, Navigation, Clock, MapPin, AlertCircle, CheckCircle2 } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
+import { PickupConfirmationModal } from '@/components/worker/pickup-confirmation-modal'
+import { toast } from 'sonner'
 
 // Dynamically import Leaflet components to avoid SSR issues
 const MapContainer = dynamic(() => import('react-leaflet').then((mod) => mod.MapContainer), { ssr: false })
@@ -134,13 +136,26 @@ export function WasteRouteOptimizer() {
   const [currentZoneIndex, setCurrentZoneIndex] = useState(0)
   const [completingZoneId, setCompletingZoneId] = useState<string | null>(null)
 
-  const handleCompleteZone = async (zoneId: string) => {
+  // Confirmation modal state
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false)
+  const [confirmingZone, setConfirmingZone] = useState<RouteZone | null>(null)
+
+  // Open confirmation modal instead of completing directly
+  const handleRequestComplete = (zone: RouteZone) => {
+    setConfirmingZone(zone)
+    setConfirmModalOpen(true)
+  }
+
+  // Handle confirmed pickup (with photo proof)
+  const handlePickupConfirmed = async (photoUrl?: string) => {
+    if (!confirmingZone) return
+    const zoneId = confirmingZone.id
     setCompletingZoneId(zoneId)
     try {
       const res = await fetch(`/api/waste/collect/${zoneId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: 1000 }),
+        body: JSON.stringify({ amount: 1000, photoUrl }),
       })
       if (res.ok) {
         setCurrentZoneIndex((prev) => prev + 1)
@@ -149,6 +164,35 @@ export function WasteRouteOptimizer() {
       console.error('Error completing zone:', error)
     } finally {
       setCompletingZoneId(null)
+      setConfirmingZone(null)
+    }
+  }
+
+  // Handle declined pickup (with reason)
+  const handlePickupDeclined = async (reason: string, details: string) => {
+    if (!confirmingZone) return
+    try {
+      // Log as missed stop if it's a household signal
+      if (confirmingZone.is_household_signal && confirmingZone.household_id) {
+        await fetch('/api/worker/missed-stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            householdId: confirmingZone.household_id,
+            reason,
+            reasonDetails: details,
+            gpsLat: workerLocation[0],
+            gpsLng: workerLocation[1],
+          }),
+        })
+      }
+      // Skip this zone in the route
+      setCurrentZoneIndex((prev) => prev + 1)
+      toast.info(`Skipped ${confirmingZone.name} — reason: ${reason}`)
+    } catch (error) {
+      console.error('Error logging decline:', error)
+    } finally {
+      setConfirmingZone(null)
     }
   }
 
@@ -352,7 +396,7 @@ export function WasteRouteOptimizer() {
                           <Button
                             size="sm"
                             className={`w-full ${isHousehold ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white text-xs`}
-                            onClick={() => handleCompleteZone(zone.id)}
+                            onClick={() => handleRequestComplete(zone)}
                             disabled={completingZoneId === zone.id}
                           >
                             {completingZoneId === zone.id ? (
@@ -565,7 +609,7 @@ export function WasteRouteOptimizer() {
                               size="sm"
                               variant="default"
                               className={`${isHousehold ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white h-6 text-[10px] px-2`}
-                              onClick={() => handleCompleteZone(zone.id)}
+                              onClick={() => handleRequestComplete(zone)}
                               disabled={completingZoneId === zone.id}
                             >
                               {completingZoneId === zone.id ? <Loader2 className="w-3 h-3 animate-spin" /> : isHousehold ? 'Picked Up' : 'Complete'}
@@ -581,6 +625,19 @@ export function WasteRouteOptimizer() {
           </Card>
         )}
       </div>
+      {/* Pickup Confirmation Modal */}
+      {confirmingZone && (
+        <PickupConfirmationModal
+          open={confirmModalOpen}
+          onOpenChange={setConfirmModalOpen}
+          zoneName={confirmingZone.name}
+          zoneId={confirmingZone.id}
+          isHousehold={!!confirmingZone.is_household_signal}
+          householdId={confirmingZone.household_id}
+          onConfirmed={handlePickupConfirmed}
+          onDeclined={handlePickupDeclined}
+        />
+      )}
     </div>
   )
 }

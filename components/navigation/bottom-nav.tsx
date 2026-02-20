@@ -25,11 +25,6 @@ export function BottomNav() {
       icon: <Home className="w-5 h-5" />,
     },
     {
-      label: 'Waste',
-      href: '/waste',
-      icon: <Droplet className="w-5 h-5" />,
-    },
-    {
       label: 'Market',
       href: '/marketplace',
       icon: <ShoppingCart className="w-5 h-5" />,

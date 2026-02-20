@@ -14,12 +14,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Leaf, 
-  Coins, 
-  LogOut, 
-  User, 
-  Settings, 
+import {
+  Leaf,
+  Coins,
+  LogOut,
+  User,
+  Settings,
   Bell,
   Menu,
   X
@@ -39,7 +39,7 @@ export function TopNavbar() {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  
+
   const [user, setUser] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -49,7 +49,7 @@ export function TopNavbar() {
       try {
         // Use getUser() instead of getSession() for proper server validation
         const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
-        
+
         if (authUser && !authError) {
           const { data: profile } = await supabase
             .from('profiles')
@@ -90,8 +90,6 @@ export function TopNavbar() {
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/marketplace', label: 'Marketplace' },
     { href: '/chat', label: 'Chat' },
-    { href: '/waste', label: 'Waste' },
-    { href: '/waste-route-optimizer', label: 'Route Optimization' },
   ]
 
   const getInitials = (name: string | null) => {
