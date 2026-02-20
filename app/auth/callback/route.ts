@@ -7,14 +7,20 @@ export async function GET(request: Request) {
   const next = searchParams.get('next') ?? '/dashboard'
 
   if (code) {
-    const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
-
-    if (!error) {
-      // Check user role and redirect accordingly
-      const { data: { user } } = await supabase.auth.getUser()
+    try {
+      const supabase = await createClient()
       
-      if (user) {
+      // Exchange code for session - this will automatically store tokens in cookies
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+
+      if (error) {
+        console.error('Auth exchange error:', error)
+        return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`)
+      }
+
+      if (data?.session?.user) {
+        const user = data.session.user
+        
         // Check if profile exists
         let { data: profile } = await supabase
           .from('profiles')
@@ -24,7 +30,7 @@ export async function GET(request: Request) {
 
         // Create profile if it doesn't exist (new OAuth user)
         if (!profile) {
-          const { data: newProfile } = await supabase
+          const { data: newProfile, error: insertError } = await supabase
             .from('profiles')
             .insert({
               id: user.id,
@@ -37,6 +43,10 @@ export async function GET(request: Request) {
             .select('role')
             .single()
           
+          if (insertError) {
+            console.error('Profile creation error:', insertError)
+          }
+          
           profile = newProfile
         }
 
@@ -48,10 +58,14 @@ export async function GET(request: Request) {
         }
       }
 
+      // Default redirect if no user or profile info
       return NextResponse.redirect(`${origin}${next}`)
+    } catch (error) {
+      console.error('Callback error:', error)
+      return NextResponse.redirect(`${origin}/login?error=callback_error`)
     }
   }
 
-  // Return the user to an error page with instructions
-  return NextResponse.redirect(`${origin}/login?error=auth_callback_error`)
+  // No code provided
+  return NextResponse.redirect(`${origin}/login?error=no_code`)
 }

@@ -19,11 +19,13 @@ export async function createClient() {
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {
-            // Handle cookie setting errors
+            cookiesToSet.forEach(({ name, value, options }) => {
+              // Ensure value is a string, not an object
+              const stringValue = typeof value === 'string' ? value : JSON.stringify(value)
+              cookieStore.set(name, stringValue, options)
+            })
+          } catch (error) {
+            console.error('Error setting cookies:', error)
           }
         },
       },

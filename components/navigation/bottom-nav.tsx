@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, ShoppingCart, MessageCircle, User, Zap } from 'lucide-react'
+import { Home, ShoppingCart, MessageCircle, User, Zap, Droplet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
@@ -25,6 +25,11 @@ export function BottomNav() {
       icon: <Home className="w-5 h-5" />,
     },
     {
+      label: 'Waste',
+      href: '/waste',
+      icon: <Droplet className="w-5 h-5" />,
+    },
+    {
       label: 'Market',
       href: '/marketplace',
       icon: <ShoppingCart className="w-5 h-5" />,
@@ -34,11 +39,6 @@ export function BottomNav() {
       href: '/chat',
       icon: <MessageCircle className="w-5 h-5" />,
       badge: 0,
-    },
-    {
-      label: 'Segregation',
-      href: '/segregation',
-      icon: <Zap className="w-5 h-5" />,
     },
     {
       label: 'Profile',

@@ -16,35 +16,66 @@ export async function middleware(request: NextRequest) {
     },
   })
 
-  // Create Supabase client
+  // Create Supabase client with proper cookie handling
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         get(name: string) {
-          return request.cookies.get(name)?.value
+          const value = request.cookies.get(name)?.value
+          return value
         },
         set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({ name, value, ...options })
-          response = NextResponse.next({
-            request: { headers: request.headers },
-          })
-          response.cookies.set({ name, value, ...options })
+          try {
+            request.cookies.set({ name, value, ...options })
+            response = NextResponse.next({
+              request: { headers: request.headers },
+            })
+            response.cookies.set({ name, value, ...options })
+          } catch (error) {
+            console.error(`Error setting cookie ${name}:`, error)
+          }
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: '', ...options })
-          response = NextResponse.next({
-            request: { headers: request.headers },
-          })
-          response.cookies.set({ name, value: '', ...options })
+          try {
+            request.cookies.set({ name, value: '', ...options })
+            response = NextResponse.next({
+              request: { headers: request.headers },
+            })
+            response.cookies.set({ name, value: '', ...options })
+          } catch (error) {
+            console.error(`Error removing cookie ${name}:`, error)
+          }
         },
       },
     }
   )
 
-  // Check authentication
-  const { data: { session } } = await supabase.auth.getSession()
+  // Check authentication with error handling - clear bad tokens
+  let session = null
+  try {
+    const { data: { session: authSession }, error } = await supabase.auth.getSession()
+    
+    if (error) {
+      console.warn('Session retrieval error:', error.code)
+      // Clear cookies if there's an auth error to prevent loops
+      if (error.code === 'refresh_token_not_found' || error.code === 'invalid_token') {
+        response.cookies.delete('sb-rtzawrqurynym...access-token')
+        response.cookies.delete('sb-rtzawrqurynym...refresh-token')
+        // Delete all supabase cookies
+        response.cookies.getAll().forEach((cookie) => {
+          if (cookie.name.includes('sb-')) {
+            response.cookies.delete(cookie.name)
+          }
+        })
+      }
+    } else {
+      session = authSession
+    }
+  } catch (error) {
+    console.warn('Error checking session:', error instanceof Error ? error.message : 'Unknown error')
+  }
 
   // Public routes that don't require authentication
   const publicRoutes = [

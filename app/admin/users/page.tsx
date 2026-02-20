@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { Suspense, useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -67,7 +67,7 @@ const KERALA_DISTRICTS = [
   'Kozhikode', 'Wayanad', 'Kannur', 'Kasaragod',
 ]
 
-export default function AdminUsersPage() {
+function AdminUsersContent() {
   const searchParams = useSearchParams()
   const [users, setUsers] = useState<UserRow[]>([])
   const [total, setTotal] = useState(0)
@@ -505,5 +505,13 @@ export default function AdminUsersPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+export default function AdminUsersPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-zinc-400" /></div>}>
+      <AdminUsersContent />
+    </Suspense>
   )
 }

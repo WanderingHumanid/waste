@@ -90,6 +90,8 @@ export function TopNavbar() {
     { href: '/segregation', label: 'Segregation' },
     { href: '/marketplace', label: 'Marketplace' },
     { href: '/chat', label: 'Chat' },
+    { href: '/waste', label: 'Waste' },
+    { href: '/waste-route-optimizer', label: 'Route Optimization' },
   ]
 
   const getInitials = (name: string | null) => {

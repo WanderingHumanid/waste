@@ -240,9 +240,9 @@ export default function DashboardPage() {
                     </a>
                   </Button>
                   <Button variant="outline" className="h-auto flex-col py-4" asChild>
-                    <a href="/profile">
-                      <History className="w-5 h-5 mb-2" />
-                      <span className="text-xs">Collection History</span>
+                    <a href="/waste-route-optimizer">
+                      <MapPin className="w-5 h-5 mb-2" />
+                      <span className="text-xs">Route Optimization</span>
                     </a>
                   </Button>
                   <Button variant="outline" className="h-auto flex-col py-4" asChild>
