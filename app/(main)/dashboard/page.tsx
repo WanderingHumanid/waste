@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Zap, Leaf, BarChart3, AlertCircle, History, ShoppingBag, MapPin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -15,6 +16,15 @@ import { FeeTracker, FeeTrackerCompact } from '@/components/citizen/fee-tracker'
 
 // Location/Home Anchor Components
 import { LocationStatusCard, HomeAnchorDialog } from '@/components/location'
+
+// Waste type options
+const WASTE_TYPES = [
+  { id: 'wet', label: 'Wet Waste', description: 'Food scraps, vegetable peels' },
+  { id: 'dry', label: 'Dry Waste', description: 'Paper, plastic, cardboard' },
+  { id: 'recyclable', label: 'Recyclable', description: 'Bottles, cans, metal' },
+  { id: 'hazardous', label: 'Hazardous', description: 'Batteries, chemicals' },
+  { id: 'e-waste', label: 'E-Waste', description: 'Electronics, cables' },
+] as const
 
 interface DashboardData {
   name: string
@@ -36,6 +46,7 @@ export default function DashboardPage() {
   const [canSignal, setCanSignal] = useState(false)
   const [showAnchorDialog, setShowAnchorDialog] = useState(false)
   const [locationKey, setLocationKey] = useState(0) // Force refresh location card
+  const [selectedWasteTypes, setSelectedWasteTypes] = useState<string[]>(['wet', 'dry']) // Default types
 
   // Fetch user data on mount
   useEffect(() => {
@@ -84,13 +95,22 @@ export default function DashboardPage() {
   }, [])
 
   const toggleWasteReady = async () => {
+    // Require at least one waste type if marking ready
+    if (!data.wasteReady && selectedWasteTypes.length === 0) {
+      toast.error('Please select at least one waste type')
+      return
+    }
+
     setLoading(true)
     try {
       // Call API to toggle waste ready status
       const response = await fetch('/api/households/establish', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ waste_ready: !data.wasteReady }),
+        body: JSON.stringify({ 
+          waste_ready: !data.wasteReady,
+          waste_types: selectedWasteTypes,
+        }),
       })
       
       const result = await response.json()
@@ -104,7 +124,7 @@ export default function DashboardPage() {
         toast.success(data.wasteReady ? 'Status Updated' : 'Signal Sent!', {
           description: data.wasteReady 
             ? 'Waste ready signal cancelled.'
-            : 'Your collection worker has been notified. Expect collection soon!',
+            : `Your collection worker has been notified for ${selectedWasteTypes.join(', ')} waste.`,
         })
       } else {
         toast.error('Failed to update status', {
@@ -116,6 +136,14 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const toggleWasteType = (typeId: string) => {
+    setSelectedWasteTypes(prev => 
+      prev.includes(typeId) 
+        ? prev.filter(t => t !== typeId)
+        : [...prev, typeId]
+    )
   }
 
   return (
@@ -173,11 +201,43 @@ export default function DashboardPage() {
                   Waste Ready Status
                 </CardTitle>
                 <CardDescription>
-                  Tell us when your waste is ready for collection
+                  Select waste types and signal when ready for collection
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <CardContent className="space-y-4">
+                {/* Waste Type Selection */}
+                {!data.wasteReady && (
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      What type of waste do you have?
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {WASTE_TYPES.map((type) => (
+                        <label
+                          key={type.id}
+                          className={cn(
+                            'flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-all',
+                            selectedWasteTypes.includes(type.id)
+                              ? 'border-primary bg-primary/10'
+                              : 'border-border hover:border-primary/50'
+                          )}
+                        >
+                          <Checkbox
+                            checked={selectedWasteTypes.includes(type.id)}
+                            onCheckedChange={() => toggleWasteType(type.id)}
+                          />
+                          <div>
+                            <p className="text-sm font-medium">{type.label}</p>
+                            <p className="text-xs text-muted-foreground">{type.description}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Status and Action */}
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-2">
                   <div className="flex-1">
                     <p className="text-sm text-muted-foreground mb-2">
                       Current Status:
@@ -188,10 +248,15 @@ export default function DashboardPage() {
                     )}>
                       {data.wasteReady ? '✓ Ready for Collection' : '○ Not Ready'}
                     </p>
+                    {data.wasteReady && selectedWasteTypes.length > 0 && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Types: {selectedWasteTypes.join(', ')}
+                      </p>
+                    )}
                   </div>
                   <Button
                     onClick={toggleWasteReady}
-                    disabled={loading}
+                    disabled={loading || (!data.wasteReady && selectedWasteTypes.length === 0)}
                     size="lg"
                     variant={data.wasteReady ? 'outline' : 'default'}
                     className={cn(

@@ -72,6 +72,14 @@ const NAV: NavItem[] = [
     ],
   },
   {
+    label: 'Analytics',
+    icon: BarChart3,
+    children: [
+      { label: 'Performance KPIs', href: '/admin/performance' },
+      { label: 'ML Predictions', href: '/admin/predictions' },
+    ],
+  },
+  {
     label: 'Audit Logs',
     href: '/admin/logs',
     icon: FileText,

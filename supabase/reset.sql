@@ -15,6 +15,11 @@ DROP TABLE IF EXISTS waste_hotspots CASCADE;
 DROP TABLE IF EXISTS district_waste_stats CASCADE;
 DROP TABLE IF EXISTS wards CASCADE;
 DROP TABLE IF EXISTS kerala_districts CASCADE;
+DROP TABLE IF EXISTS performance_metrics CASCADE;
+DROP TABLE IF EXISTS hotspot_predictions CASCADE;
+DROP TABLE IF EXISTS worker_shifts CASCADE;
+DROP TABLE IF EXISTS missed_stops CASCADE;
+DROP TABLE IF EXISTS collection_logs CASCADE;
 DROP TABLE IF EXISTS worker_assignments CASCADE;
 DROP TABLE IF EXISTS admin_logs CASCADE;
 DROP TABLE IF EXISTS user_payments CASCADE;
@@ -242,6 +247,208 @@ CREATE TABLE worker_assignments (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ============================================================
+-- FIELD DATA CAPTURE & PERFORMANCE TRACKING TABLES
+-- ============================================================
+
+-- Collection Logs: Detailed pickup records with timestamps and proof
+CREATE TABLE collection_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  signal_id UUID REFERENCES signals(id) ON DELETE SET NULL,
+  household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  worker_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  ward_number INTEGER,
+  district TEXT DEFAULT 'Ernakulam',
+  
+  -- Pickup details
+  pickup_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  arrival_time TIMESTAMPTZ,  -- When worker arrived at location
+  departure_time TIMESTAMPTZ,  -- When worker left
+  
+  -- Waste data
+  waste_types waste_type[] DEFAULT '{}',
+  estimated_weight_kg DECIMAL(6,2),
+  actual_weight_kg DECIMAL(6,2),
+  waste_quality TEXT CHECK (waste_quality IN ('well_segregated', 'partially_segregated', 'not_segregated')),
+  
+  -- Verification
+  photo_url TEXT,
+  photo_verified BOOLEAN DEFAULT FALSE,
+  gps_lat DECIMAL(10,7),
+  gps_lng DECIMAL(10,7),
+  gps_accuracy_m DECIMAL(6,2),
+  proximity_verified BOOLEAN DEFAULT FALSE,
+  
+  -- Payment
+  fee_collected DECIMAL(10,2) DEFAULT 50.00,
+  payment_method TEXT CHECK (payment_method IN ('cash', 'upi', 'wallet', 'exempt')),
+  payment_status TEXT CHECK (payment_status IN ('paid', 'pending', 'waived')) DEFAULT 'paid',
+  
+  -- Notes
+  notes TEXT,
+  citizen_rating INTEGER CHECK (citizen_rating >= 1 AND citizen_rating <= 5),
+  worker_notes TEXT,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_collection_logs_worker ON collection_logs(worker_id);
+CREATE INDEX idx_collection_logs_pickup_time ON collection_logs(pickup_time);
+CREATE INDEX idx_collection_logs_ward ON collection_logs(ward_number);
+
+-- Missed Stops: Track failed collection attempts
+CREATE TABLE missed_stops (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  worker_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  signal_id UUID REFERENCES signals(id) ON DELETE SET NULL,
+  ward_number INTEGER,
+  district TEXT DEFAULT 'Ernakulam',
+  
+  -- Reason for miss
+  reason TEXT NOT NULL CHECK (reason IN (
+    'no_access', 'gate_locked', 'resident_absent', 'waste_not_ready',
+    'hazardous_waste', 'vehicle_full', 'time_constraint', 'wrong_location', 'other'
+  )),
+  reason_details TEXT,
+  
+  -- Location proof
+  photo_url TEXT,
+  gps_lat DECIMAL(10,7),
+  gps_lng DECIMAL(10,7),
+  
+  -- Resolution
+  rescheduled_for TIMESTAMPTZ,
+  resolved BOOLEAN DEFAULT FALSE,
+  resolved_at TIMESTAMPTZ,
+  resolved_by UUID REFERENCES auth.users(id),
+  
+  missed_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_missed_stops_worker ON missed_stops(worker_id);
+CREATE INDEX idx_missed_stops_date ON missed_stops(missed_at);
+CREATE INDEX idx_missed_stops_resolved ON missed_stops(resolved);
+
+-- Worker Shifts: Track daily routes and performance
+CREATE TABLE worker_shifts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  worker_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  ward_number INTEGER,
+  district TEXT DEFAULT 'Ernakulam',
+  
+  -- Shift timing
+  shift_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  start_time TIMESTAMPTZ,
+  end_time TIMESTAMPTZ,
+  
+  -- Route tracking (array of GPS points)
+  route_points JSONB DEFAULT '[]',  -- [{lat, lng, timestamp}, ...]
+  total_distance_km DECIMAL(8,2),
+  
+  -- Performance metrics
+  households_assigned INTEGER DEFAULT 0,
+  households_collected INTEGER DEFAULT 0,
+  households_missed INTEGER DEFAULT 0,
+  total_waste_kg DECIMAL(8,2),
+  total_fees_collected DECIMAL(10,2),
+  
+  -- Efficiency
+  avg_time_per_pickup_mins DECIMAL(6,2),
+  on_time_percentage DECIMAL(5,2),
+  
+  -- Status
+  status TEXT CHECK (status IN ('scheduled', 'in_progress', 'completed', 'incomplete')) DEFAULT 'scheduled',
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_worker_shifts_worker ON worker_shifts(worker_id);
+CREATE INDEX idx_worker_shifts_date ON worker_shifts(shift_date);
+CREATE UNIQUE INDEX idx_worker_shifts_unique ON worker_shifts(worker_id, shift_date);
+
+-- Hotspot Predictions: ML predictions cache
+CREATE TABLE hotspot_predictions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  ward_number INTEGER NOT NULL,
+  district TEXT DEFAULT 'Ernakulam',
+  
+  -- Prediction data
+  prediction_date DATE NOT NULL,
+  predicted_volume_kg DECIMAL(10,2),
+  confidence_score DECIMAL(5,2),
+  peak_hour_start INTEGER CHECK (peak_hour_start >= 0 AND peak_hour_start <= 23),
+  peak_hour_end INTEGER CHECK (peak_hour_end >= 0 AND peak_hour_end <= 23),
+  
+  -- Factors
+  is_weekend BOOLEAN DEFAULT FALSE,
+  is_holiday BOOLEAN DEFAULT FALSE,
+  weather_factor DECIMAL(3,2) DEFAULT 1.0,
+  historical_avg_kg DECIMAL(10,2),
+  
+  -- Location centroid
+  centroid_lat DECIMAL(10,7),
+  centroid_lng DECIMAL(10,7),
+  
+  -- Recommendation
+  extra_pickups_needed INTEGER DEFAULT 0,
+  priority_level TEXT CHECK (priority_level IN ('low', 'medium', 'high', 'critical')) DEFAULT 'medium',
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(ward_number, district, prediction_date)
+);
+CREATE INDEX idx_hotspot_predictions_date ON hotspot_predictions(prediction_date);
+CREATE INDEX idx_hotspot_predictions_priority ON hotspot_predictions(priority_level);
+
+-- Performance Metrics: Aggregated daily/weekly KPIs
+CREATE TABLE performance_metrics (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  
+  -- Scope
+  metric_date DATE NOT NULL,
+  metric_type TEXT NOT NULL CHECK (metric_type IN ('daily', 'weekly', 'monthly')),
+  ward_number INTEGER,  -- NULL for district-wide
+  district TEXT DEFAULT 'Ernakulam',
+  worker_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- NULL for ward/district aggregates
+  
+  -- Collection metrics
+  total_households INTEGER DEFAULT 0,
+  households_serviced INTEGER DEFAULT 0,
+  coverage_percentage DECIMAL(5,2),
+  
+  -- Waste metrics
+  wet_waste_kg DECIMAL(10,2) DEFAULT 0,
+  dry_waste_kg DECIMAL(10,2) DEFAULT 0,
+  recyclable_kg DECIMAL(10,2) DEFAULT 0,
+  hazardous_kg DECIMAL(10,2) DEFAULT 0,
+  total_waste_kg DECIMAL(10,2) DEFAULT 0,
+  
+  -- Efficiency metrics
+  avg_pickup_time_mins DECIMAL(6,2),
+  route_efficiency_pct DECIMAL(5,2),  -- Actual vs optimal route
+  on_time_rate DECIMAL(5,2),
+  missed_stop_rate DECIMAL(5,2),
+  
+  -- Financial
+  fees_collected DECIMAL(12,2) DEFAULT 0,
+  fees_pending DECIMAL(12,2) DEFAULT 0,
+  
+  -- Environmental impact
+  co2_avoided_kg DECIMAL(10,2),  -- From recycling/composting
+  landfill_diverted_kg DECIMAL(10,2),
+  recycling_rate DECIMAL(5,2),
+  
+  -- Citizen satisfaction
+  avg_citizen_rating DECIMAL(3,2),
+  total_ratings INTEGER DEFAULT 0,
+  complaints_received INTEGER DEFAULT 0,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(metric_date, metric_type, ward_number, district, worker_id)
+);
+CREATE INDEX idx_performance_metrics_date ON performance_metrics(metric_date);
+CREATE INDEX idx_performance_metrics_worker ON performance_metrics(worker_id);
+CREATE INDEX idx_performance_metrics_type ON performance_metrics(metric_type);
+
 -- Kerala Districts
 CREATE TABLE kerala_districts (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -345,6 +552,11 @@ ALTER TABLE public_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE worker_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE collection_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE missed_stops ENABLE ROW LEVEL SECURITY;
+ALTER TABLE worker_shifts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hotspot_predictions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE performance_metrics ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- STEP 7: CREATE SIMPLE RLS POLICIES (NO RECURSION!)
@@ -389,11 +601,57 @@ CREATE POLICY "payments_read" ON user_payments FOR SELECT USING (
   EXISTS (SELECT 1 FROM households h WHERE h.id = household_id AND h.user_id = auth.uid())
 );
 
--- Admin Logs: No public access (only via service role)
-CREATE POLICY "admin_logs_none" ON admin_logs FOR SELECT USING (false);
+-- Admin Logs: Admins can read and insert
+CREATE POLICY "admin_logs_admin_read" ON admin_logs FOR SELECT USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
+CREATE POLICY "admin_logs_admin_insert" ON admin_logs FOR INSERT WITH CHECK (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
 
--- Worker Assignments: Workers see their own
+-- Worker Assignments: Workers see their own, admins can manage all
 CREATE POLICY "assignments_read" ON worker_assignments FOR SELECT USING (auth.uid() = worker_id);
+CREATE POLICY "assignments_admin_all" ON worker_assignments FOR ALL USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- Collection Logs: Workers can insert/read their own, admins can read all
+CREATE POLICY "collection_logs_worker_insert" ON collection_logs FOR INSERT WITH CHECK (auth.uid() = worker_id);
+CREATE POLICY "collection_logs_worker_read" ON collection_logs FOR SELECT USING (auth.uid() = worker_id);
+CREATE POLICY "collection_logs_admin_read" ON collection_logs FOR SELECT USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- Missed Stops: Workers can insert/read their own, admins can manage all
+CREATE POLICY "missed_stops_worker_insert" ON missed_stops FOR INSERT WITH CHECK (auth.uid() = worker_id);
+CREATE POLICY "missed_stops_worker_read" ON missed_stops FOR SELECT USING (auth.uid() = worker_id);
+CREATE POLICY "missed_stops_admin_all" ON missed_stops FOR ALL USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- Worker Shifts: Workers can read/update their own, admins can manage all
+CREATE POLICY "worker_shifts_worker_read" ON worker_shifts FOR SELECT USING (auth.uid() = worker_id);
+CREATE POLICY "worker_shifts_worker_insert" ON worker_shifts FOR INSERT WITH CHECK (auth.uid() = worker_id);
+CREATE POLICY "worker_shifts_worker_update" ON worker_shifts FOR UPDATE USING (auth.uid() = worker_id);
+CREATE POLICY "worker_shifts_admin_all" ON worker_shifts FOR ALL USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- Hotspot Predictions: Admins only
+CREATE POLICY "hotspot_predictions_admin_read" ON hotspot_predictions FOR SELECT USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
+CREATE POLICY "hotspot_predictions_admin_insert" ON hotspot_predictions FOR INSERT WITH CHECK (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- Performance Metrics: Admins only
+CREATE POLICY "performance_metrics_admin_read" ON performance_metrics FOR SELECT USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
+CREATE POLICY "performance_metrics_admin_insert" ON performance_metrics FOR INSERT WITH CHECK (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
 
 -- ============================================================
 -- STEP 8: CREATE FUNCTIONS

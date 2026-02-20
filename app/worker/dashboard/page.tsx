@@ -227,6 +227,34 @@ export default function WorkerDashboardPage() {
       )
       .subscribe()
 
+    // Subscribe to signals table for new collection requests
+    const signalsChannel = supabase
+      .channel('worker-radar-signals')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'signals' },
+        (payload) => {
+          console.log('New signal:', payload)
+          toast.info('🔔 New collection request!', {
+            description: 'A household needs waste collection.',
+          })
+          if (workerPosition) {
+            fetchHouseholds()
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'signals' },
+        () => {
+          // Refetch to update status
+          if (workerPosition) {
+            fetchHouseholds()
+          }
+        }
+      )
+      .subscribe()
+
     // Subscribe to ward-specific broadcast channel for "Digital Bell" events
     let wardChannel: ReturnType<typeof supabase.channel> | null = null
     if (workerWard) {
@@ -248,6 +276,7 @@ export default function WorkerDashboardPage() {
 
     return () => {
       supabase.removeChannel(postgresChannel)
+      supabase.removeChannel(signalsChannel)
       if (wardChannel) {
         supabase.removeChannel(wardChannel)
       }

@@ -298,7 +298,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { waste_ready } = body
+    const { waste_ready, waste_types } = body
 
     if (typeof waste_ready !== 'boolean') {
       return NextResponse.json(
@@ -306,6 +306,12 @@ export async function PATCH(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Validate waste_types if provided
+    const validWasteTypes = ['wet', 'dry', 'recyclable', 'hazardous', 'e-waste', 'mixed']
+    const cleanedWasteTypes = Array.isArray(waste_types) 
+      ? waste_types.filter(t => validWasteTypes.includes(t))
+      : ['mixed']
 
     // Update waste_ready status
     const { data, error } = await supabase
@@ -338,14 +344,14 @@ export async function PATCH(request: NextRequest) {
         .single()
 
       if (!existingSignal) {
-        // Create new signal
+        // Create new signal with waste types
         const { error: signalError } = await supabase
           .from('signals')
           .insert({
             household_id: data.id,
             user_id: user.id,
             status: 'pending',
-            waste_types: ['mixed'], // Default, can be expanded
+            waste_types: cleanedWasteTypes,
             created_at: new Date().toISOString(),
           })
 
@@ -353,8 +359,14 @@ export async function PATCH(request: NextRequest) {
           console.error('Error creating signal:', signalError)
           // Non-blocking - household is already updated
         } else {
-          console.log('Signal created for household:', data.id)
+          console.log('Signal created for household:', data.id, 'waste types:', cleanedWasteTypes)
         }
+      } else {
+        // Update existing signal with new waste types
+        await supabase
+          .from('signals')
+          .update({ waste_types: cleanedWasteTypes, updated_at: new Date().toISOString() })
+          .eq('id', existingSignal.id)
       }
     } else {
       // User cancelled - update any pending signals to cancelled
