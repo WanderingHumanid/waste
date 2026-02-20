@@ -15,6 +15,22 @@ const CircleMarker = dynamic(() => import('react-leaflet').then((mod) => mod.Cir
 const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false })
 const Tooltip = dynamic(() => import('react-leaflet').then((mod) => mod.Tooltip), { ssr: false })
 const Polyline = dynamic(() => import('react-leaflet').then((mod) => mod.Polyline), { ssr: false })
+const UseMapComponent = dynamic(() => import('react-leaflet').then((mod) => {
+  // Create a component that uses the useMap hook
+  const { useMap } = mod;
+  const FitBoundsInner = ({ bounds }: { bounds: [number, number][] }) => {
+    const map = useMap();
+    React.useEffect(() => {
+      if (bounds.length > 0) {
+        const L = require('leaflet');
+        const leafletBounds = L.latLngBounds(bounds);
+        map.fitBounds(leafletBounds, { padding: [50, 50], maxZoom: 14 });
+      }
+    }, [bounds, map]);
+    return null;
+  };
+  return FitBoundsInner;
+}), { ssr: false })
 
 const RISK_COLORS = {
   LOW: '#22c55e',
@@ -28,6 +44,25 @@ const PIRAVOM_CENTER: [number, number] = [9.8733, 76.4974]
 interface RouteZone extends ZoneState {
   distanceFromPrevious: number
   estimatedTime: number
+  is_household_signal?: boolean
+  household_id?: string
+  nickname?: string
+  ward_number?: number | null
+  waste_types?: string[]
+}
+
+interface HouseholdSignal {
+  id: string
+  name: string
+  lat: number
+  lon: number
+  fill_percentage: number
+  risk_level: string
+  is_household_signal: true
+  household_id: string
+  nickname: string
+  ward_number: number | null
+  waste_types: string[]
 }
 
 interface RouteOptimizationResult {
@@ -36,6 +71,7 @@ interface RouteOptimizationResult {
   totalDistance: number
   estimatedTotalTime: number
   hotspotCount: number
+  householdSignalCount: number
 }
 
 // Component to render route line
@@ -87,6 +123,7 @@ async function fetchOSRMRoute(waypoints: { lat: number, lon: number }[]): Promis
 
 export function WasteRouteOptimizer() {
   const [zones, setZones] = useState<ZoneState[]>([])
+  const [householdSignals, setHouseholdSignals] = useState<HouseholdSignal[]>([])
   const [route, setRoute] = useState<RouteZone[]>([])
   const [loading, setLoading] = useState(true)
   const [mapReady, setMapReady] = useState(false)
@@ -117,22 +154,33 @@ export function WasteRouteOptimizer() {
 
   useEffect(() => {
     setMapReady(true)
-    const fetchZones = async () => {
+    const fetchData = async () => {
       try {
-        const res = await fetch('/api/waste/zones')
-        if (res.ok) {
-          const data = await res.json()
+        // Fetch both zones and household signals in parallel
+        const [zonesRes, householdsRes] = await Promise.all([
+          fetch('/api/waste/zones'),
+          fetch('/api/waste/ready-households'),
+        ])
+
+        if (zonesRes.ok) {
+          const data = await zonesRes.json()
           setZones(data.zones)
         }
+
+        if (householdsRes.ok) {
+          const data = await householdsRes.json()
+          setHouseholdSignals(data.signals || [])
+        }
+
         setLoading(false)
       } catch (error) {
-        console.error('Error fetching zones:', error)
+        console.error('Error fetching data:', error)
         setLoading(false)
       }
     }
 
-    fetchZones()
-    const interval = setInterval(fetchZones, 10000)
+    fetchData()
+    const interval = setInterval(fetchData, 10000)
     return () => clearInterval(interval)
   }, [])
 
@@ -199,6 +247,17 @@ export function WasteRouteOptimizer() {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
+          {/* Auto-fit map bounds when household signals are present */}
+          {householdSignals.length > 0 && (
+            <UseMapComponent
+              bounds={[
+                ...zones.map(z => [z.lat, z.lon] as [number, number]),
+                ...householdSignals.map(h => [h.lat, h.lon] as [number, number]),
+                workerLocation,
+              ]}
+            />
+          )}
+
           {route.length > 0 && <RouteLine route={route} routePath={routePath} />}
 
           {/* Worker starting position */}
@@ -221,46 +280,64 @@ export function WasteRouteOptimizer() {
           {route.map((zone, index) => {
             const isCompleted = index < currentZoneIndex;
             const isActive = index === currentZoneIndex;
-            const markerColor = isCompleted ? '#94a3b8' : RISK_COLORS[zone.risk_level];
+            const isHousehold = !!(zone as RouteZone).is_household_signal;
+            const markerColor = isCompleted ? '#94a3b8' : isHousehold ? '#f59e0b' : RISK_COLORS[zone.risk_level];
 
             return (
               <CircleMarker
                 key={zone.id}
                 center={[zone.lat, zone.lon]}
-                radius={isActive ? Math.sqrt(zone.fill_percentage) * 3 : Math.sqrt(zone.fill_percentage) * 2.5}
+                radius={isHousehold ? (isActive ? 14 : 12) : (isActive ? Math.sqrt(zone.fill_percentage) * 3 : Math.sqrt(zone.fill_percentage) * 2.5)}
                 pathOptions={{
-                  color: markerColor,
+                  color: isHousehold ? '#d97706' : markerColor,
                   fillColor: markerColor,
-                  fillOpacity: isCompleted ? 0.3 : 0.8,
-                  weight: isActive ? 4 : 2,
+                  fillOpacity: isCompleted ? 0.3 : isHousehold ? 0.7 : 0.8,
+                  weight: isActive ? 4 : isHousehold ? 3 : 2,
                 }}
               >
-                <Tooltip permanent direction="top" className="bg-white/90 border-none shadow-sm text-[10px] font-bold px-1.5 py-0.5 rounded text-zinc-800 opacity-100">
-                  {zone.fill_percentage.toFixed(0)}%
+                <Tooltip permanent direction="top" className={`border-none shadow-sm text-[10px] font-bold px-1.5 py-0.5 rounded opacity-100 ${isHousehold ? 'bg-amber-50 text-amber-800' : 'bg-white/90 text-zinc-800'}`}>
+                  {isHousehold ? '🏠 READY' : `${zone.fill_percentage.toFixed(0)}%`}
                 </Tooltip>
                 <Popup className="w-80">
                   <div className="space-y-2 p-2">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="inline-block w-6 h-6 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center font-bold">
+                        <span className={`inline-block w-6 h-6 rounded-full text-white text-xs flex items-center justify-center font-bold ${isHousehold ? 'bg-amber-500' : 'bg-blue-500'}`}>
                           {index + 1}
                         </span>
-                        <h3 className="font-semibold text-sm text-zinc-900">{zone.name}</h3>
+                        <h3 className="font-semibold text-sm text-zinc-900">
+                          {isHousehold ? `🏠 ${zone.name}` : zone.name}
+                        </h3>
                       </div>
-                      <p className="text-xs text-zinc-500 mt-1">{zone.id}</p>
+                      {isHousehold ? (
+                        <p className="text-xs text-amber-600 mt-1 font-medium">Priority Household Pickup</p>
+                      ) : (
+                        <p className="text-xs text-zinc-500 mt-1">{zone.id}</p>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="bg-zinc-50 p-2 rounded">
-                        <p className="text-zinc-500">Fill Level</p>
-                        <p className="font-semibold text-zinc-900">{zone.fill_percentage.toFixed(1)}%</p>
-                      </div>
-                      <div className="bg-zinc-50 p-2 rounded">
-                        <p className="text-zinc-500">Risk</p>
-                        <p style={{ color: RISK_COLORS[zone.risk_level] }} className="font-semibold">
-                          {zone.risk_level}
-                        </p>
-                      </div>
+                      {isHousehold ? (
+                        <div className="bg-amber-50 p-2 rounded col-span-2">
+                          <p className="text-amber-700 font-semibold">Ready for Pickup</p>
+                          {(zone as RouteZone).waste_types && (zone as RouteZone).waste_types!.length > 0 && (
+                            <p className="text-amber-600 mt-1">Types: {(zone as RouteZone).waste_types!.join(', ')}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="bg-zinc-50 p-2 rounded">
+                            <p className="text-zinc-500">Fill Level</p>
+                            <p className="font-semibold text-zinc-900">{zone.fill_percentage.toFixed(1)}%</p>
+                          </div>
+                          <div className="bg-zinc-50 p-2 rounded">
+                            <p className="text-zinc-500">Risk</p>
+                            <p style={{ color: RISK_COLORS[zone.risk_level] }} className="font-semibold">
+                              {zone.risk_level}
+                            </p>
+                          </div>
+                        </>
+                      )}
                       <div className="bg-blue-50 p-2 rounded col-span-2">
                         <p className="text-zinc-500">Distance from Previous</p>
                         <p className="font-semibold text-blue-600">{zone.distanceFromPrevious.toFixed(2)} km</p>
@@ -274,7 +351,7 @@ export function WasteRouteOptimizer() {
                         <div className="col-span-2 pt-2 border-t border-zinc-200 mt-2">
                           <Button
                             size="sm"
-                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                            className={`w-full ${isHousehold ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white text-xs`}
                             onClick={() => handleCompleteZone(zone.id)}
                             disabled={completingZoneId === zone.id}
                           >
@@ -283,7 +360,7 @@ export function WasteRouteOptimizer() {
                             ) : (
                               <CheckCircle2 className="w-3 h-3 mr-2" />
                             )}
-                            Complete Collection
+                            {isHousehold ? 'Mark Picked Up' : 'Complete Collection'}
                           </Button>
                         </div>
                       )}
@@ -321,6 +398,42 @@ export function WasteRouteOptimizer() {
                 </Popup>
               </CircleMarker>
             ))}
+
+          {/* Household signals NOT in route (pulsing markers) */}
+          {householdSignals
+            .filter((h) => !route.find((r) => r.id === `household_${h.household_id}` || r.id === h.id))
+            .map((signal) => (
+              <CircleMarker
+                key={signal.id}
+                center={[signal.lat, signal.lon]}
+                radius={12}
+                pathOptions={{
+                  color: '#f59e0b',
+                  fillColor: '#fbbf24',
+                  fillOpacity: 0.6,
+                  weight: 3,
+                }}
+              >
+                <Tooltip permanent direction="top" className="bg-amber-50 border-none shadow-sm text-[10px] font-bold px-1.5 py-0.5 rounded text-amber-800 opacity-100">
+                  🏠 READY
+                </Tooltip>
+                <Popup className="w-80">
+                  <div className="space-y-2 p-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🏠</span>
+                      <h3 className="font-semibold text-sm text-zinc-900">{signal.nickname}</h3>
+                    </div>
+                    <div className="bg-amber-50 p-2 rounded">
+                      <p className="text-xs font-semibold text-amber-700">Ready for Pickup</p>
+                      {signal.waste_types && signal.waste_types.length > 0 && (
+                        <p className="text-xs text-amber-600 mt-1">Types: {signal.waste_types.join(', ')}</p>
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-400">(Not yet in optimized route — click Optimize)</p>
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
         </MapContainer>
       )}
 
@@ -350,8 +463,34 @@ export function WasteRouteOptimizer() {
             )}
           </Button>
 
+          {/* Priority Pickups Badge */}
+          {householdSignals.length > 0 && (
+            <div className="mb-4 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 p-3 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🏠</span>
+                <div>
+                  <p className="font-semibold text-amber-800 text-sm">
+                    {householdSignals.length} Priority Pickup{householdSignals.length !== 1 ? 's' : ''}
+                  </p>
+                  <p className="text-xs text-amber-600">
+                    Households marked as ready for collection
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {routeInfo && (
             <div className="space-y-3 text-xs">
+              {routeInfo.householdSignalCount > 0 && (
+                <div className="bg-gradient-to-r from-amber-50 to-yellow-50 p-3 rounded border border-amber-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-amber-700 font-medium">🏠 Priority Pickups</span>
+                    <span className="font-bold text-amber-700">{routeInfo.householdSignalCount}</span>
+                  </div>
+                </div>
+              )}
+
               <div className="bg-blue-50 p-3 rounded">
                 <div className="flex items-center justify-between">
                   <span className="text-zinc-600">Total Distance</span>
@@ -376,7 +515,7 @@ export function WasteRouteOptimizer() {
               <div className="bg-zinc-50 p-3 rounded">
                 <div className="flex items-center justify-between">
                   <span className="text-zinc-600">Zones in Route</span>
-                  <span className="font-semibold text-zinc-900">{route.length} / {zones.length}</span>
+                  <span className="font-semibold text-zinc-900">{route.length} / {zones.length + householdSignals.length}</span>
                 </div>
               </div>
             </div>
@@ -390,37 +529,46 @@ export function WasteRouteOptimizer() {
               {route.map((zone, index) => {
                 const isCompleted = index < currentZoneIndex;
                 const isActive = index === currentZoneIndex;
-                const bColor = isCompleted ? '#e2e8f0' : RISK_COLORS[zone.risk_level];
+                const isHousehold = !!(zone as RouteZone).is_household_signal;
+                const bColor = isCompleted ? '#e2e8f0' : isHousehold ? '#f59e0b' : RISK_COLORS[zone.risk_level];
 
                 return (
-                  <div key={zone.id} className={`p-2 rounded border-l-4 ${isActive ? 'bg-blue-50/50 shadow-sm' : 'bg-zinc-50'} ${isCompleted ? 'opacity-60' : ''}`} style={{ borderColor: bColor }}>
+                  <div key={zone.id} className={`p-2 rounded border-l-4 ${isActive ? 'bg-blue-50/50 shadow-sm' : isHousehold ? 'bg-amber-50/50' : 'bg-zinc-50'} ${isCompleted ? 'opacity-60' : ''}`} style={{ borderColor: bColor }}>
                     <div className="flex items-start gap-2">
-                      <span className={`inline-block w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold flex-shrink-0 mt-0.5 ${isCompleted ? 'bg-zinc-400' : 'bg-blue-500'}`}>
+                      <span className={`inline-block w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold flex-shrink-0 mt-0.5 ${isCompleted ? 'bg-zinc-400' : isHousehold ? 'bg-amber-500' : 'bg-blue-500'}`}>
                         {index + 1}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className={`font-semibold text-xs truncate ${isCompleted ? 'text-zinc-500 line-through' : 'text-zinc-900'}`}>{zone.name}</p>
+                        <p className={`font-semibold text-xs truncate ${isCompleted ? 'text-zinc-500 line-through' : 'text-zinc-900'}`}>
+                          {isHousehold ? '🏠 ' : ''}{zone.name}
+                        </p>
                         <div className="flex gap-2 mt-1 text-xs text-zinc-500">
                           <span>📍 {zone.distanceFromPrevious.toFixed(2)} km</span>
                           <span>⏱️ {zone.estimatedTime} min</span>
                         </div>
                         <div className="mt-2 flex items-center justify-between">
-                          <span
-                            className="inline-block px-2 py-0.5 rounded text-white text-[10px] font-semibold"
-                            style={{ backgroundColor: isCompleted ? '#94a3b8' : RISK_COLORS[zone.risk_level] }}
-                          >
-                            {isCompleted ? 'COLLECTED' : `${zone.fill_percentage.toFixed(0)}% • ${zone.risk_level}`}
-                          </span>
+                          {isHousehold ? (
+                            <span className="inline-block px-2 py-0.5 rounded text-white text-[10px] font-semibold" style={{ backgroundColor: isCompleted ? '#94a3b8' : '#f59e0b' }}>
+                              {isCompleted ? 'COLLECTED' : '🏠 READY FOR PICKUP'}
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-block px-2 py-0.5 rounded text-white text-[10px] font-semibold"
+                              style={{ backgroundColor: isCompleted ? '#94a3b8' : RISK_COLORS[zone.risk_level] }}
+                            >
+                              {isCompleted ? 'COLLECTED' : `${zone.fill_percentage.toFixed(0)}% • ${zone.risk_level}`}
+                            </span>
+                          )}
 
                           {isActive && (
                             <Button
                               size="sm"
                               variant="default"
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white h-6 text-[10px] px-2"
+                              className={`${isHousehold ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white h-6 text-[10px] px-2`}
                               onClick={() => handleCompleteZone(zone.id)}
                               disabled={completingZoneId === zone.id}
                             >
-                              {completingZoneId === zone.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Complete'}
+                              {completingZoneId === zone.id ? <Loader2 className="w-3 h-3 animate-spin" /> : isHousehold ? 'Picked Up' : 'Complete'}
                             </Button>
                           )}
                         </div>
