@@ -61,14 +61,31 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
 
   // If user is not logged in and trying to access protected route
-  if (!session && !isPublicRoute && pathname !== '/') {
+  if (!session && !isPublicRoute) {
     const redirectUrl = new URL('/login', request.url)
-    redirectUrl.searchParams.set('next', pathname)
+    if (pathname !== '/') {
+      redirectUrl.searchParams.set('next', pathname)
+    }
     return NextResponse.redirect(redirectUrl)
   }
 
-  // If user is logged in and trying to access login pages, redirect to dashboard
-  if (session && (pathname === '/login' || pathname === '/')) {
+  // If user is logged in and trying to access login pages or root, redirect based on role
+  if (session && (pathname === '/login' || pathname === '/register' || pathname === '/')) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single()
+
+    console.log('[Middleware] User:', session.user.email, 'Role:', profile?.role, 'Error:', profileError?.message)
+
+    if (profile?.role === 'admin') {
+      console.log('[Middleware] Redirecting admin to /admin/dashboard')
+      return NextResponse.redirect(new URL('/admin/dashboard', request.url))
+    } else if (profile?.role === 'worker') {
+      return NextResponse.redirect(new URL('/worker/dashboard', request.url))
+    }
+    console.log('[Middleware] Redirecting citizen to /dashboard')
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

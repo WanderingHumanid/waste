@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from 'next-themes'
@@ -8,10 +8,27 @@ import './globals.css'
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#10b981' },
+    { media: '(prefers-color-scheme: dark)', color: '#059669' },
+  ],
+}
+
 export const metadata: Metadata = {
   title: 'Nirman - Smart Waste Management',
-  description: 'Smart Waste Management Portal for sustainable waste handling and circular economy',
+  description: 'Smart Waste Intelligence Platform for Kerala - Citizen, Worker, and Admin portals for efficient waste management',
   generator: 'v0.app',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Nirman',
+  },
   icons: {
     icon: [
       {

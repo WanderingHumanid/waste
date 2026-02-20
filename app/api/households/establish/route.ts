@@ -282,7 +282,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PATCH endpoint to toggle waste_ready status
+// PATCH endpoint to toggle waste_ready status (Digital Bell)
 export async function PATCH(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -310,9 +310,12 @@ export async function PATCH(request: NextRequest) {
     // Update waste_ready status
     const { data, error } = await supabase
       .from('households')
-      .update({ waste_ready })
+      .update({ 
+        waste_ready,
+        updated_at: new Date().toISOString(),
+      })
       .eq('user_id', user.id)
-      .select('id, waste_ready')
+      .select('id, waste_ready, ward_number, district, nickname')
       .single()
 
     if (error) {
@@ -323,12 +326,36 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    // Broadcast to ward-specific channel for worker radar
+    // This supplements the pg_notify trigger for real-time updates
+    if (data.ward_number) {
+      const channel = `ward:${data.district || 'Ernakulam'}:${data.ward_number}`
+      await supabase
+        .channel(channel)
+        .send({
+          type: 'broadcast',
+          event: 'digital_bell',
+          payload: {
+            household_id: data.id,
+            waste_ready: data.waste_ready,
+            nickname: data.nickname,
+            ward_number: data.ward_number,
+            timestamp: new Date().toISOString(),
+          },
+        })
+        .catch(console.error) // Non-blocking
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         household_id: data.id,
         waste_ready: data.waste_ready,
+        ward_number: data.ward_number,
       },
+      message: waste_ready 
+        ? 'Digital Bell activated! Workers in your ward have been notified.'
+        : 'Waste ready status cancelled.',
     })
   } catch (error) {
     console.error('Toggle waste_ready error:', error)

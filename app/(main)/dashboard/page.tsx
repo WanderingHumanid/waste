@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Zap, Leaf, BarChart3, AlertCircle, Camera, History, ShoppingBag, MapPin } from 'lucide-react'
+import { Zap, Leaf, BarChart3, AlertCircle, History, ShoppingBag, MapPin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase/client'
 
 // Citizen Layer Components
 import { VerificationBanner } from '@/components/citizen/verification-banner'
@@ -25,16 +26,57 @@ interface DashboardData {
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData>({
-    name: 'User',
-    greenCredits: 245,
+    name: '',
+    greenCredits: 0,
     nextCollection: '2026-02-22',
     wasteReady: false,
-    itemsInMarketplace: 3,
+    itemsInMarketplace: 0,
   })
   const [loading, setLoading] = useState(false)
   const [canSignal, setCanSignal] = useState(false)
   const [showAnchorDialog, setShowAnchorDialog] = useState(false)
   const [locationKey, setLocationKey] = useState(0) // Force refresh location card
+
+  // Fetch user data on mount
+  useEffect(() => {
+    const fetchUserData = async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (user) {
+        // Get profile
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, green_credits')
+          .eq('id', user.id)
+          .single()
+
+        // Get household waste_ready status
+        const { data: household } = await supabase
+          .from('households')
+          .select('waste_ready')
+          .eq('user_id', user.id)
+          .single()
+
+        // Get marketplace items count
+        const { count } = await supabase
+          .from('marketplace_items')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('is_available', true)
+
+        setData(prev => ({
+          ...prev,
+          name: profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || '',
+          greenCredits: profile?.green_credits || 0,
+          wasteReady: household?.waste_ready || false,
+          itemsInMarketplace: count || 0,
+        }))
+      }
+    }
+
+    fetchUserData()
+  }, [])
 
   // Handle verification status changes
   const handleVerificationStatusChange = useCallback((verified: boolean) => {
@@ -82,7 +124,7 @@ export default function DashboardPage() {
         {/* Welcome Section */}
         <div>
           <h1 className="text-3xl font-bold text-foreground">
-            Welcome back, {data.name}!
+            {data.name ? `Welcome back, ${data.name}!` : 'Welcome back!'}
           </h1>
           <p className="text-muted-foreground mt-2">
             Your household waste management dashboard
@@ -176,7 +218,7 @@ export default function DashboardPage() {
                 <CardContent>
                   <p className="text-3xl font-bold text-primary">{data.greenCredits}</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Earned from waste segregation
+                    Earned from proper waste disposal
                   </p>
                 </CardContent>
               </Card>
@@ -226,13 +268,7 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <Button variant="outline" className="h-auto flex-col py-4" asChild>
-                    <a href="/segregation">
-                      <Camera className="w-5 h-5 mb-2" />
-                      <span className="text-xs">AI Segregation</span>
-                    </a>
-                  </Button>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <Button variant="outline" className="h-auto flex-col py-4" asChild>
                     <a href="/marketplace">
                       <BarChart3 className="w-5 h-5 mb-2" />
@@ -264,7 +300,7 @@ export default function DashboardPage() {
                     SUCHITWA Mission Tip
                   </p>
                   <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                    Proper waste segregation earns you more green credits! Use our AI-powered camera to classify waste correctly.
+                    Proper waste disposal earns you green credits! Signal when waste is ready and trade recyclables on the marketplace.
                   </p>
                 </div>
               </div>

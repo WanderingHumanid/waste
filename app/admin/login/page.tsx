@@ -64,15 +64,28 @@ export default function AdminLoginPage() {
 
       if (data.user) {
         // Verify user is an admin
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', data.user.id)
           .single()
 
-        if (profile?.role !== 'admin') {
+        console.log('Profile query result:', { profile, profileError, userId: data.user.id })
+
+        if (profileError) {
+          console.error('Profile fetch error:', profileError)
+          setError(`Profile error: ${profileError.message}`)
+          return
+        }
+
+        if (!profile) {
+          setError('No profile found. Please contact support.')
+          return
+        }
+
+        if (profile.role !== 'admin') {
           await supabase.auth.signOut()
-          setError('Access denied. Admin credentials required.')
+          setError(`Access denied. Your role is "${profile.role}", admin required.`)
           return
         }
 

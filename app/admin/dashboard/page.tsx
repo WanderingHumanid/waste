@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import {
   Users,
   Truck,
@@ -13,6 +14,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Loader2,
+  MapPin,
+  AlertTriangle,
+  Building2,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -29,6 +33,28 @@ import {
 } from 'recharts'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { DistrictHotspotsModal } from '@/components/admin/district-hotspots-modal'
+
+interface DistrictSummary {
+  district_code: string
+  district_name: string
+  daily_waste_tons: number
+  coverage_pct: number
+  active_workers: number
+  active_hotspots: number
+  center_lat: number
+  center_lng: number
+}
+
+interface StateStats {
+  totalPopulation: number
+  totalWasteTons: number
+  totalHouseholds: number
+  totalCovered: number
+  totalWorkers: number
+  totalRevenue: number
+  totalHotspots: number
+}
 
 interface StatsData {
   totalUsers: number
@@ -97,8 +123,13 @@ function KpiCard({ title, value, sub, icon: Icon, trend, trendValue, accent = 't
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<StatsData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [districts, setDistricts] = useState<DistrictSummary[]>([])
+  const [stateStats, setStateStats] = useState<StateStats | null>(null)
+  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null)
+  const [districtModalOpen, setDistrictModalOpen] = useState(false)
 
   useEffect(() => {
+    // Fetch main stats
     fetch('/api/admin/stats')
       .then((r) => r.json())
       .then((d) => {
@@ -106,6 +137,17 @@ export default function AdminDashboardPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false))
+
+    // Fetch Kerala districts
+    fetch('/api/admin/districts')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          setDistricts(d.districts || [])
+          setStateStats(d.stateStats || null)
+        }
+      })
+      .catch(console.error)
   }, [])
 
   if (loading) {
@@ -402,6 +444,86 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Kerala Districts Grid */}
+      {districts.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-emerald-500" />
+                Kerala Districts
+              </h3>
+              <p className="text-xs text-zinc-500">
+                {stateStats ? `${(stateStats.totalWasteTons).toFixed(0)} tons daily · ${stateStats.totalWorkers.toLocaleString()} workers statewide` : 'Click a district for details'}
+              </p>
+            </div>
+            {stateStats && stateStats.totalHotspots > 0 && (
+              <Badge className="bg-red-50 text-red-700 border-red-200 gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                {stateStats.totalHotspots} Active Hotspots
+              </Badge>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2">
+            {districts.map((d) => (
+              <Card
+                key={d.district_code}
+                className={cn(
+                  'bg-white border border-zinc-200 shadow-none cursor-pointer transition-all hover:border-emerald-300 hover:shadow-sm',
+                  d.active_hotspots > 0 && 'border-l-2 border-l-red-400'
+                )}
+                onClick={() => {
+                  setSelectedDistrict(d.district_code)
+                  setDistrictModalOpen(true)
+                }}
+              >
+                <CardContent className="p-3">
+                  <div className="flex items-start justify-between mb-2">
+                    <p className="text-sm font-semibold text-zinc-800 truncate">{d.district_name}</p>
+                    {d.active_hotspots > 0 && (
+                      <Badge className="bg-red-100 text-red-700 text-[9px] px-1 py-0 ml-1">
+                        {d.active_hotspots}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-zinc-400">Waste</span>
+                      <span className="font-medium text-zinc-600">{d.daily_waste_tons.toFixed(0)}t</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-zinc-400">Coverage</span>
+                      <span className="font-medium text-emerald-600">{d.coverage_pct}%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-zinc-400 flex items-center gap-0.5">
+                        <Truck className="w-2.5 h-2.5" />
+                      </span>
+                      <span className="font-medium text-sky-600">{d.active_workers}</span>
+                    </div>
+                  </div>
+                  {/* Mini coverage bar */}
+                  <div className="h-1 bg-zinc-100 rounded-full mt-2">
+                    <div
+                      className="h-1 bg-emerald-500 rounded-full transition-all"
+                      style={{ width: `${Math.min(d.coverage_pct, 100)}%` }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* District Hotspots Modal */}
+      <DistrictHotspotsModal
+        open={districtModalOpen}
+        onOpenChange={setDistrictModalOpen}
+        districtCode={selectedDistrict}
+      />
     </div>
   )
 }
