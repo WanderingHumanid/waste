@@ -12,10 +12,10 @@ import 'leaflet/dist/leaflet.css'
 // Custom component to render labels
 function ZoneLabels({ zones }: { zones: ZoneState[] }) {
   const map = useMap()
-  
+
   useEffect(() => {
     const markers: L.Marker[] = []
-    
+
     zones.forEach((zone) => {
       const marker = L.marker([zone.lat, zone.lon], {
         icon: L.divIcon({
@@ -26,12 +26,12 @@ function ZoneLabels({ zones }: { zones: ZoneState[] }) {
       }).addTo(map)
       markers.push(marker)
     })
-    
+
     return () => {
       markers.forEach((m) => m.remove())
     }
   }, [zones, map])
-  
+
   return null
 }
 
@@ -42,7 +42,7 @@ const RISK_COLORS = {
   CRITICAL: '#ef4444',
 }
 
-const PIRAVOM_CENTER: [number, number] = [9.8667, 76.5000]
+const PIRAVOM_CENTER: [number, number] = [9.8733, 76.4974]
 
 export function WasteMap() {
   const [zones, setZones] = useState<ZoneState[]>([])
@@ -96,11 +96,11 @@ export function WasteMap() {
           zones.map((z) =>
             z.id === zoneId
               ? {
-                  ...z,
-                  current_fill: data.zone.current_fill,
-                  fill_percentage: data.zone.fill_percentage,
-                  risk_level: data.zone.risk_level,
-                }
+                ...z,
+                current_fill: data.zone.current_fill,
+                fill_percentage: data.zone.fill_percentage,
+                risk_level: data.zone.risk_level,
+              }
               : z
           )
         )
@@ -132,7 +132,7 @@ export function WasteMap() {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        
+
         <ZoneLabels zones={zones} />
 
         {zones.map((zone) => {
@@ -283,7 +283,7 @@ export function WasteMap() {
         <Card className="bg-white shadow-lg border-zinc-200 p-3">
           <h3 className="font-semibold text-xs text-zinc-900 mb-2">Risk Levels</h3>
           <div className="space-y-1.5 text-xs">
-            {(Object.entries(RISK_COLORS) as const).map(([level, color]) => (
+            {Object.entries(RISK_COLORS).map(([level, color]) => (
               <div key={level} className="flex items-center gap-2">
                 <div
                   className="w-3 h-3 rounded-full"
