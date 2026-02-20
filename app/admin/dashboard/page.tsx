@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -34,6 +34,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { DistrictHotspotsModal } from '@/components/admin/district-hotspots-modal'
+import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 
 interface DistrictSummary {
   district_code: string
@@ -69,6 +71,11 @@ interface StatsData {
   wasteTypeBreakdown: Record<string, number>
   weeklyTrend: { day: string; actual: number; predicted: number }[]
   recentActivity: { id: string; action_type: string; created_at: string; new_value: Record<string, unknown> }[]
+  userTrend: number
+  userTrendPct: number
+  signalTrend: number
+  thisWeekUsers: number
+  thisWeekSignals: number
 }
 
 const WASTE_COLORS: Record<string, string> = {
@@ -128,8 +135,7 @@ export default function AdminDashboardPage() {
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null)
   const [districtModalOpen, setDistrictModalOpen] = useState(false)
 
-  useEffect(() => {
-    // Fetch main stats
+  const fetchStats = useCallback(() => {
     fetch('/api/admin/stats')
       .then((r) => r.json())
       .then((d) => {
@@ -137,6 +143,11 @@ export default function AdminDashboardPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    // Fetch main stats
+    fetchStats()
 
     // Fetch Kerala districts
     fetch('/api/admin/districts')
@@ -148,7 +159,39 @@ export default function AdminDashboardPage() {
         }
       })
       .catch(console.error)
-  }, [])
+
+    // Set up real-time subscription for signals
+    const supabase = createClient()
+    const channel = supabase
+      .channel('admin-dashboard-signals')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'signals' },
+        (payload) => {
+          console.log('New signal received:', payload)
+          // Refresh stats when new signal arrives
+          fetchStats()
+          toast.success('New Collection Signal', {
+            description: `A household has requested waste collection.`,
+          })
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'signals' },
+        (payload) => {
+          console.log('Signal updated:', payload)
+          // Refresh stats when signal status changes
+          fetchStats()
+        }
+      )
+      .subscribe()
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [fetchStats])
 
   if (loading) {
     return (
@@ -183,8 +226,8 @@ export default function AdminDashboardPage() {
           value={stats?.totalUsers ?? '—'}
           sub={`${stats?.citizens ?? 0} citizens · ${stats?.workers ?? 0} workers`}
           icon={Users}
-          trend="up"
-          trendValue="+12 this week"
+          trend={stats && stats.userTrend > 0 ? 'up' : stats && stats.userTrend < 0 ? 'down' : 'neutral'}
+          trendValue={stats ? `${stats.userTrend >= 0 ? '+' : ''}${stats.thisWeekUsers} this week` : undefined}
           accent="text-zinc-700"
         />
         <KpiCard
@@ -208,8 +251,8 @@ export default function AdminDashboardPage() {
           value={`₹${((stats?.revenueEstimate ?? 0) / 1000).toFixed(1)}k`}
           sub={`${stats?.collectedCount ?? 0} collections`}
           icon={Wallet}
-          trend="up"
-          trendValue="↑ 8% vs last week"
+          trend={stats && stats.signalTrend > 0 ? 'up' : stats && stats.signalTrend < 0 ? 'down' : 'neutral'}
+          trendValue={stats ? `${stats.signalTrend >= 0 ? '↑' : '↓'} ${Math.abs(stats.signalTrend)}% vs last week` : undefined}
           accent="text-emerald-500"
         />
       </div>

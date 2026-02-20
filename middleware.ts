@@ -43,8 +43,8 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Check authentication
-  const { data: { session } } = await supabase.auth.getSession()
+  // Check authentication - use getUser() for server-side verification
+  const { data: { user }, error } = await supabase.auth.getUser()
 
   // Public routes that don't require authentication
   const publicRoutes = [
@@ -61,7 +61,7 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
 
   // If user is not logged in and trying to access protected route
-  if (!session && !isPublicRoute) {
+  if ((!user || error) && !isPublicRoute) {
     const redirectUrl = new URL('/login', request.url)
     if (pathname !== '/') {
       redirectUrl.searchParams.set('next', pathname)
@@ -70,14 +70,14 @@ export async function middleware(request: NextRequest) {
   }
 
   // If user is logged in and trying to access login pages or root, redirect based on role
-  if (session && (pathname === '/login' || pathname === '/register' || pathname === '/')) {
+  if (user && (pathname === '/login' || pathname === '/register' || pathname === '/')) {
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .single()
 
-    console.log('[Middleware] User:', session.user.email, 'Role:', profile?.role, 'Error:', profileError?.message)
+    console.log('[Middleware] User:', user.email, 'Role:', profile?.role, 'Error:', profileError?.message)
 
     if (profile?.role === 'admin') {
       console.log('[Middleware] Redirecting admin to /admin/dashboard')
@@ -91,13 +91,13 @@ export async function middleware(request: NextRequest) {
 
   // Protect all /admin/* routes (except /admin/login)
   if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
-    if (!session) {
+    if (!user) {
       return NextResponse.redirect(new URL('/admin/login', request.url))
     }
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .single()
     if (profile?.role !== 'admin') {
       return NextResponse.redirect(new URL('/admin/login', request.url))
@@ -105,11 +105,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // If logged in user visits admin login, check if they're admin
-  if (session && pathname === '/admin/login') {
+  if (user && pathname === '/admin/login') {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .single()
 
     if (profile?.role === 'admin') {
@@ -118,11 +118,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // If logged in user visits worker login, check if they're worker
-  if (session && pathname === '/worker/login') {
+  if (user && pathname === '/worker/login') {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .single()
 
     if (profile?.role === 'worker' || profile?.role === 'admin') {

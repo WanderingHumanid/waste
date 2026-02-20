@@ -16,6 +16,7 @@ interface CollectRequest {
   paymentMethod: 'cash' | 'upi' | 'wallet'
   amount: number
   notes?: string
+  photoUrl?: string  // Optional proof photo URL from upload-proof endpoint
 }
 
 const VERIFICATION_RADIUS_METERS = 50
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body: CollectRequest = await request.json()
-    const { householdId, workerLat, workerLng, paymentReceived, paymentMethod, amount, notes } = body
+    const { householdId, workerLat, workerLng, paymentReceived, paymentMethod, amount, notes, photoUrl } = body
 
     // Validate inputs
     if (!householdId || workerLat === undefined || workerLng === undefined) {
@@ -113,25 +114,66 @@ export async function POST(request: NextRequest) {
     }
 
     // ==== ATOMIC TRANSACTION ====
-    // 1. Create signal record (pickup)
-    const { data: signal, error: signalError } = await supabase
+    // 1. Create signal record (pickup) or update existing pending signal
+    // First check if there's an existing pending signal for this household
+    const { data: existingSignal } = await supabase
       .from('signals')
-      .insert({
-        household_id: householdId,
-        worker_id: user.id,
-        status: 'picked_up',
-        picked_up_at: new Date().toISOString(),
-        verification_status: proximityVerified ? 'manual_verified' : 'ai_verified',
-      })
       .select('id')
+      .eq('household_id', householdId)
+      .in('status', ['pending', 'acknowledged'])
       .single()
 
-    if (signalError) {
-      console.error('Signal creation error:', signalError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to record collection' },
-        { status: 500 }
-      )
+    let signal
+    if (existingSignal) {
+      // Update existing signal
+      const { data: updatedSignal, error: updateError } = await supabase
+        .from('signals')
+        .update({
+          assigned_to: user.id,
+          status: 'collected',
+          collected_at: new Date().toISOString(),
+          verification_photo_url: photoUrl || null,
+          proximity_verified: proximityVerified,
+          notes: notes || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingSignal.id)
+        .select('id')
+        .single()
+
+      if (updateError) {
+        console.error('Signal update error:', updateError)
+        return NextResponse.json(
+          { success: false, error: 'Failed to record collection' },
+          { status: 500 }
+        )
+      }
+      signal = updatedSignal
+    } else {
+      // Create new signal (direct collection without prior digital bell)
+      const { data: newSignal, error: signalError } = await supabase
+        .from('signals')
+        .insert({
+          household_id: householdId,
+          user_id: household.user_id,
+          assigned_to: user.id,
+          status: 'collected',
+          collected_at: new Date().toISOString(),
+          verification_photo_url: photoUrl || null,
+          proximity_verified: proximityVerified,
+          notes: notes || null,
+        })
+        .select('id')
+        .single()
+
+      if (signalError) {
+        console.error('Signal creation error:', signalError)
+        return NextResponse.json(
+          { success: false, error: 'Failed to record collection' },
+          { status: 500 }
+        )
+      }
+      signal = newSignal
     }
 
     // 2. Create payment record

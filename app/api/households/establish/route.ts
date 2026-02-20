@@ -326,6 +326,52 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    // === CRITICAL: Create or update signal record ===
+    // This is what makes the signal visible to admin and workers
+    if (waste_ready) {
+      // Check if there's already an active signal for this household
+      const { data: existingSignal } = await supabase
+        .from('signals')
+        .select('id')
+        .eq('household_id', data.id)
+        .in('status', ['pending', 'acknowledged'])
+        .single()
+
+      if (!existingSignal) {
+        // Create new signal
+        const { error: signalError } = await supabase
+          .from('signals')
+          .insert({
+            household_id: data.id,
+            user_id: user.id,
+            status: 'pending',
+            waste_types: ['mixed'], // Default, can be expanded
+            created_at: new Date().toISOString(),
+          })
+
+        if (signalError) {
+          console.error('Error creating signal:', signalError)
+          // Non-blocking - household is already updated
+        } else {
+          console.log('Signal created for household:', data.id)
+        }
+      }
+    } else {
+      // User cancelled - update any pending signals to cancelled
+      const { error: cancelError } = await supabase
+        .from('signals')
+        .update({ 
+          status: 'cancelled',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('household_id', data.id)
+        .in('status', ['pending', 'acknowledged'])
+
+      if (cancelError) {
+        console.error('Error cancelling signals:', cancelError)
+      }
+    }
+
     // Broadcast to ward-specific channel for worker radar
     // This supplements the pg_notify trigger for real-time updates
     if (data.ward_number) {
