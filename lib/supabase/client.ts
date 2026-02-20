@@ -67,7 +67,29 @@ export const subscribeToWasteStatus = (
         table: 'households',
         filter: `id=eq.${householdId}`,
       },
-      (payload) => onUpdate(payload.new?.waste_ready_status)
+      (payload) => onUpdate(payload.new?.waste_ready)
+    )
+    .subscribe()
+}
+
+/**
+ * Subscribe to all active waste signals (for workers/admin map)
+ */
+export const subscribeToAllActiveSignals = (
+  client: ReturnType<typeof createClient>,
+  onChange: (payload: any) => void
+) => {
+  return client
+    .channel('all-active-signals')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'households',
+        // We filter for waste_ready transitions or updates to already ready households
+      },
+      (payload) => onChange(payload)
     )
     .subscribe()
 }

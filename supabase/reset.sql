@@ -752,9 +752,8 @@ DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE signals; EXCEPTION WHE
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE chats; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE marketplace_items; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- ============================================================
--- DONE! Database is ready.
--- ============================================================
+-- Note: Storage buckets and policies should be managed through the Supabase Dashboard
+-- if you encounter permission errors here.
 
 SELECT 'Database reset complete! Tables created: ' || 
   (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public') || 

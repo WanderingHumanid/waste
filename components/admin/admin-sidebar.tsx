@@ -37,42 +37,39 @@ const NAV: NavItem[] = [
     icon: LayoutDashboard,
   },
   {
-    label: 'User Management',
+    label: 'People',
     icon: Users,
     children: [
       { label: 'All Users', href: '/admin/users' },
-      { label: 'Role Escalation', href: '/admin/users?filter=citizens' },
       { label: 'Worker Allocation', href: '/admin/users?filter=workers' },
     ],
   },
   {
-    label: 'Intelligence',
+    label: 'Geospatial',
     icon: Map,
     children: [
-      { label: 'Geospatial Map', href: '/admin/map' },
+      { label: 'Command Map', href: '/admin/map' },
       { label: 'Hotspot Heatmap', href: '/admin/map?layer=hotspots' },
-      { label: 'ML Predictions', href: '/admin/map?layer=predictions' },
     ],
   },
   {
-    label: 'Fleet Dispatch',
+    label: 'Operations',
     icon: Truck,
     children: [
-      { label: 'Active Workers', href: '/admin/fleet' },
+      { label: 'Fleet Status', href: '/admin/fleet' },
       { label: 'Route Optimization', href: '/admin/fleet?view=routes' },
     ],
   },
   {
-    label: 'Financial Reports',
+    label: 'Finance',
     icon: Wallet,
     children: [
       { label: 'Revenue Overview', href: '/admin/finance' },
-      { label: 'Fee Collection', href: '/admin/finance?tab=fees' },
-      { label: 'Green Credits', href: '/admin/finance?tab=credits' },
+      { label: 'Fee Tracking', href: '/admin/finance?tab=fees' },
     ],
   },
   {
-    label: 'Analytics',
+    label: 'Insights',
     icon: BarChart3,
     children: [
       { label: 'Performance KPIs', href: '/admin/performance' },
@@ -94,7 +91,7 @@ export function AdminSidebar({ className }: AdminSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const [expanded, setExpanded] = useState<string[]>(['User Management', 'Intelligence'])
+  const [expanded, setExpanded] = useState<string[]>(['People', 'Geospatial'])
 
   const toggle = (label: string) => {
     setExpanded((prev) =>

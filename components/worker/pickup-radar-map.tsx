@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { RoutingService } from '@/lib/services/routing-service'
+import { MapPin } from 'lucide-react'
 
 interface Household {
   id: string
@@ -83,6 +85,8 @@ export default function PickupRadarMap({
   const workerMarkerRef = useRef<L.Marker | null>(null)
   const householdMarkersRef = useRef<Map<string, L.Marker>>(new Map())
   const rangeCircleRef = useRef<L.Circle | null>(null)
+  const routeLayerRef = useRef<L.Polyline | null>(null)
+  const [activeRoute, setActiveRoute] = useState<any>(null)
 
   // Initialize map
   useEffect(() => {
@@ -212,6 +216,57 @@ export default function PickupRadarMap({
     }
   }, [selectedHousehold])
 
+  // Fetch and update route
+  useEffect(() => {
+    async function updateRoute() {
+      if (!mapRef.current || !workerPosition) return
+
+      let routePoints = [{ lat: workerPosition.lat, lng: workerPosition.lng }]
+
+      if (selectedHousehold) {
+        // Simple direct road route to selected
+        routePoints.push({ lat: selectedHousehold.lat, lng: selectedHousehold.lng })
+      } else if (households.length > 0) {
+        // Optimize route through top 5 nearest/high-priority households
+        const targets = households
+          .slice(0, 5)
+          .map(h => ({ lat: h.lat, lng: h.lng }))
+        routePoints.push(...targets)
+      }
+
+      if (routePoints.length < 2) {
+        if (routeLayerRef.current) routeLayerRef.current.remove()
+        routeLayerRef.current = null
+        return
+      }
+
+      const routeData = selectedHousehold
+        ? await RoutingService.getRoute(routePoints)
+        : await RoutingService.optimizeRoute(routePoints)
+
+      if (routeData && routeData.geometry) {
+        // Convert GeoJSON coordinates (lng, lat) to Leaflet (lat, lng)
+        const latLngs = routeData.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]])
+
+        if (routeLayerRef.current) {
+          routeLayerRef.current.setLatLngs(latLngs)
+        } else {
+          routeLayerRef.current = L.polyline(latLngs, {
+            color: '#10b981',
+            weight: 5,
+            opacity: 0.7,
+            lineJoin: 'round',
+            dashArray: selectedHousehold ? undefined : '10, 10',
+          }).addTo(mapRef.current)
+        }
+
+        setActiveRoute(routeData)
+      }
+    }
+
+    updateRoute()
+  }, [workerPosition, households, selectedHousehold])
+
   return (
     <div className="relative">
       <div
@@ -219,7 +274,7 @@ export default function PickupRadarMap({
         className="h-[400px] rounded-lg overflow-hidden"
         style={{ background: '#1a1a2e' }}
       />
-      
+
       {/* Legend */}
       <div className="absolute bottom-4 left-4 bg-amber-900/90 backdrop-blur rounded-lg p-3 text-xs text-amber-200 space-y-2">
         <div className="flex items-center gap-2">
@@ -235,6 +290,21 @@ export default function PickupRadarMap({
           <span>50m Range</span>
         </div>
       </div>
+
+      {/* GPS Missing Overlay */}
+      {!workerPosition && (
+        <div className="absolute inset-0 bg-amber-900/40 backdrop-blur-[2px] z-[1000] flex items-center justify-center p-6 text-center">
+          <div className="bg-amber-900/95 p-6 rounded-xl border border-amber-500/50 shadow-2xl max-w-xs">
+            <div className="w-12 h-12 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <MapPin className="w-6 h-6 text-amber-500" />
+            </div>
+            <p className="text-amber-100 font-bold mb-2">Waiting for GPS...</p>
+            <p className="text-amber-300/70 text-xs mb-4 leading-relaxed">
+              We need your coordinates to show nearby waste signals. Please ensure location permissions are enabled.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

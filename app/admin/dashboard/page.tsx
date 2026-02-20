@@ -203,8 +203,8 @@ export default function AdminDashboardPage() {
 
   const wasteChartData = stats
     ? Object.entries(stats.wasteTypeBreakdown)
-        .filter(([, v]) => v > 0)
-        .map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }))
+      .filter(([, v]) => v > 0)
+      .map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }))
     : []
 
   const weeklyData = stats?.weeklyTrend || []
@@ -213,8 +213,8 @@ export default function AdminDashboardPage() {
     <div className="space-y-6 max-w-7xl">
       {/* Header */}
       <div>
-        <p className="text-sm text-zinc-500">
-          Piravom Grama Panchayat · Ernakulam District · Kerala
+        <p className="text-sm text-zinc-500 font-medium tracking-tight">
+          Operational Overview · Piravom
         </p>
       </div>
 
@@ -317,7 +317,7 @@ export default function AdminDashboardPage() {
                 <span className="text-[11px] text-zinc-500">Actual</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-0.5 bg-rose-600 rounded border-dashed" style={{ borderTop: '2px dashed #dc2626', background: 'none' }} />
+                <div className="w-4 h-0.5 border-t-2 border-dashed border-rose-600" />
                 <span className="text-[11px] text-zinc-500">ML Predicted</span>
               </div>
             </div>
@@ -455,16 +455,22 @@ export default function AdminDashboardPage() {
                       <div className={cn(
                         'w-1.5 h-6 rounded-full',
                         act.action_type === 'role_change' ? 'bg-sky-400' :
-                        act.action_type === 'ward_assignment' ? 'bg-amber-400' : 'bg-zinc-300'
+                          act.action_type === 'ward_assignment' ? 'bg-amber-400' : 'bg-zinc-300'
                       )} />
                       <div>
                         <p className="text-xs font-medium text-zinc-700 capitalize">
-                          {act.action_type.replace('_', ' ')}
+                          {act.action_type === 'role_change' ? 'Role Updated' :
+                            act.action_type === 'ward_assignment' ? 'Ward Allocation' :
+                              act.action_type.replace('_', ' ')}
                         </p>
                         <p className="text-[11px] text-zinc-400">
-                          {act.new_value && typeof act.new_value === 'object'
-                            ? JSON.stringify(act.new_value).slice(0, 40)
-                            : 'No details'}
+                          {act.action_type === 'role_change' ? (
+                            `Changed to ${act.new_value?.role || 'user'}`
+                          ) : act.action_type === 'ward_assignment' ? (
+                            `Assigned to Ward ${act.new_value?.ward_number}`
+                          ) : (
+                            'System modification'
+                          )}
                         </p>
                       </div>
                     </div>
@@ -487,85 +493,6 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Kerala Districts Grid */}
-      {districts.length > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-emerald-500" />
-                Kerala Districts
-              </h3>
-              <p className="text-xs text-zinc-500">
-                {stateStats ? `${(stateStats.totalWasteTons).toFixed(0)} tons daily · ${stateStats.totalWorkers.toLocaleString()} workers statewide` : 'Click a district for details'}
-              </p>
-            </div>
-            {stateStats && stateStats.totalHotspots > 0 && (
-              <Badge className="bg-red-50 text-red-700 border-red-200 gap-1">
-                <AlertTriangle className="w-3 h-3" />
-                {stateStats.totalHotspots} Active Hotspots
-              </Badge>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2">
-            {districts.map((d) => (
-              <Card
-                key={d.district_code}
-                className={cn(
-                  'bg-white border border-zinc-200 shadow-none cursor-pointer transition-all hover:border-emerald-300 hover:shadow-sm',
-                  d.active_hotspots > 0 && 'border-l-2 border-l-red-400'
-                )}
-                onClick={() => {
-                  setSelectedDistrict(d.district_code)
-                  setDistrictModalOpen(true)
-                }}
-              >
-                <CardContent className="p-3">
-                  <div className="flex items-start justify-between mb-2">
-                    <p className="text-sm font-semibold text-zinc-800 truncate">{d.district_name}</p>
-                    {d.active_hotspots > 0 && (
-                      <Badge className="bg-red-100 text-red-700 text-[9px] px-1 py-0 ml-1">
-                        {d.active_hotspots}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="text-zinc-400">Waste</span>
-                      <span className="font-medium text-zinc-600">{d.daily_waste_tons.toFixed(0)}t</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="text-zinc-400">Coverage</span>
-                      <span className="font-medium text-emerald-600">{d.coverage_pct}%</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="text-zinc-400 flex items-center gap-0.5">
-                        <Truck className="w-2.5 h-2.5" />
-                      </span>
-                      <span className="font-medium text-sky-600">{d.active_workers}</span>
-                    </div>
-                  </div>
-                  {/* Mini coverage bar */}
-                  <div className="h-1 bg-zinc-100 rounded-full mt-2">
-                    <div
-                      className="h-1 bg-emerald-500 rounded-full transition-all"
-                      style={{ width: `${Math.min(d.coverage_pct, 100)}%` }}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* District Hotspots Modal */}
-      <DistrictHotspotsModal
-        open={districtModalOpen}
-        onOpenChange={setDistrictModalOpen}
-        districtCode={selectedDistrict}
-      />
     </div>
   )
 }

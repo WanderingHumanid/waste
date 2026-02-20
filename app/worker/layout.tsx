@@ -33,6 +33,9 @@ interface WorkerProfile {
   full_name: string | null
   role: string
   ward_number: number | null
+  assignments?: {
+    ward_number: number | null
+  }[]
 }
 
 export default function WorkerLayout({ children }: { children: React.ReactNode }) {
@@ -68,7 +71,12 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
         setDebugStatus(`User found (${user.id}). Fetching profile...`)
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('id, full_name, role, ward_number')
+          .select(`
+            id, 
+            full_name, 
+            role,
+            assignments:worker_assignments(ward_number)
+          `)
           .eq('id', user.id)
           .single()
 
@@ -76,6 +84,16 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
           setDebugStatus(`Error fetching profile: ${profileError.message || profileError.code}. Redirecting...`)
           router.push('/worker/login')
           return
+        }
+
+        if (profile && (profile.role === 'worker' || profile.role === 'hks_worker' || profile.role === 'admin')) {
+          // Flatten the ward_number from the assignment (Supabase returns joined data as an array)
+          const assignments = (profile as any).assignments
+          const formattedProfile = {
+            ...profile,
+            ward_number: Array.isArray(assignments) ? assignments[0]?.ward_number : (assignments?.ward_number || null)
+          }
+          setWorker(formattedProfile as any)
         }
 
         if (!profile || (profile.role !== 'worker' && profile.role !== 'hks_worker' && profile.role !== 'admin')) {

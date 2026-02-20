@@ -15,7 +15,13 @@ import {
   RefreshCw,
   Banknote,
   Phone,
-  ChevronRight
+  ChevronRight,
+  Brain,
+  Flame,
+  AlertTriangle,
+  Clock,
+  TrendingUp,
+  AlertTriangle as AlertTriangleIcon
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 
@@ -44,6 +50,39 @@ interface Household {
     full_name: string | null
     phone: string | null
   }
+  ml_prediction?: {
+    volume_kg: number
+    confidence: number
+    urgency: 'low' | 'medium' | 'high' | 'critical'
+    priority_score: number
+  }
+}
+
+interface WardPrediction {
+  wardNumber: number
+  district: string | null
+  predictedVolumeKg: number
+  confidence: number
+  peakHourStart: number
+  peakHourEnd: number
+  extraPickupsNeeded: number
+  priority: 'low' | 'medium' | 'high' | 'critical'
+}
+
+interface PredictionSummary {
+  recentSignals24h: number
+  totalExtraPickups: number
+  totalPredictedVolumeKg: number
+  criticalWards: number
+  highPriorityWards: number
+}
+
+interface Hotspot {
+  id: string
+  hotspot_name: string
+  address: string
+  severity: number
+  status: string
 }
 
 interface WorkerPosition {
@@ -54,7 +93,6 @@ interface WorkerPosition {
 
 export default function WorkerDashboardPage() {
   const supabase = createClient()
-  
   const [households, setHouseholds] = useState<Household[]>([])
   const [selectedHousehold, setSelectedHousehold] = useState<Household | null>(null)
   const [workerPosition, setWorkerPosition] = useState<WorkerPosition | null>(null)
@@ -63,7 +101,11 @@ export default function WorkerDashboardPage() {
   const [verifying, setVerifying] = useState(false)
   const [collecting, setCollecting] = useState(false)
   const [withinRange, setWithinRange] = useState(false)
-  
+  const [predictions, setPredictions] = useState<WardPrediction[]>([])
+  const [predictionSummary, setPredictionSummary] = useState<PredictionSummary | null>(null)
+  const [hotspots, setHotspots] = useState<Hotspot[]>([])
+  const [gpsError, setGpsError] = useState<string | null>(null)
+  const [gpsPermission, setGpsPermission] = useState<'prompt' | 'granted' | 'denied'>('prompt')
   const watchIdRef = useRef<number | null>(null)
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -75,12 +117,15 @@ export default function WorkerDashboardPage() {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('ward_number')
+        .select('id, assignments:worker_assignments(ward_number)')
         .eq('id', user.id)
         .single()
 
-      if (profile?.ward_number) {
-        setWorkerWard(profile.ward_number)
+      const assignments = (profile as any)?.assignments
+      const ward = Array.isArray(assignments) ? assignments[0]?.ward_number : (assignments?.ward_number || null)
+
+      if (ward) {
+        setWorkerWard(ward)
       }
     }
     getWorkerWard()
@@ -103,8 +148,23 @@ export default function WorkerDashboardPage() {
         })
       },
       (error) => {
+        let errorMessage = 'Unable to get GPS location'
+
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Location permission denied. Please enable GPS in browser settings.'
+            setGpsPermission('denied')
+            break
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location unavailable. Check device GPS settings.'
+            break
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out. Retrying...'
+            break
+        }
+
+        setGpsError((prev) => prev === errorMessage ? prev : errorMessage)
         console.error('GPS error:', error)
-        toast.error('Unable to get GPS location')
       },
       {
         enableHighAccuracy: true,
@@ -164,7 +224,7 @@ export default function WorkerDashboardPage() {
     const R = 6371000 // Earth radius in meters
     const dLat = (selectedHousehold.lat - workerPosition.lat) * Math.PI / 180
     const dLng = (selectedHousehold.lng - workerPosition.lng) * Math.PI / 180
-    const a = 
+    const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos(workerPosition.lat * Math.PI / 180) * Math.cos(selectedHousehold.lat * Math.PI / 180) *
       Math.sin(dLng / 2) * Math.sin(dLng / 2)
@@ -359,9 +419,14 @@ export default function WorkerDashboardPage() {
       {/* Status Bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={`w-3 h-3 rounded-full ${workerPosition ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+          <div className={`w-3 h-3 rounded-full ${workerPosition ? 'bg-green-500 animate-pulse' :
+            gpsPermission === 'denied' ? 'bg-red-500' :
+              'bg-amber-500 animate-pulse'
+            }`} />
           <span className="text-sm text-amber-200">
-            {workerPosition ? 'GPS Active' : 'GPS Inactive'}
+            {workerPosition ? 'GPS Active' :
+              gpsPermission === 'denied' ? 'GPS Denied' :
+                'GPS Inactive'}
           </span>
         </div>
         <Button
@@ -374,10 +439,123 @@ export default function WorkerDashboardPage() {
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
-      </div>
+      </div >
 
+      {/* GPS Error Banner */}
+      {gpsError && (
+        <Card className="bg-rose-900/30 border-rose-700">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-rose-300 font-medium">GPS Error</p>
+                <p className="text-rose-300/80 text-sm mt-1">{gpsError}</p>
+                {gpsPermission === 'denied' && (
+                  <p className="text-rose-300/60 text-xs mt-2">
+                    To enable: Click the lock icon in your browser's address bar → Site settings → Location → Allow
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* AI Predictions Summary */}
+      {predictionSummary && (predictionSummary.criticalWards > 0 || predictionSummary.highPriorityWards > 0 || predictions.length > 0) && (
+        <Card className="bg-gradient-to-r from-purple-900/40 to-amber-900/40 border-purple-700/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-amber-100 flex items-center gap-2 text-base">
+              <Brain className="w-5 h-5 text-purple-400" />
+              AI Hotspot Predictions
+            </CardTitle>
+            <CardDescription className="text-amber-300/70 text-xs">
+              ML model analysis for your area
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Quick stats row */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-amber-900/40 rounded-lg p-2 text-center">
+                <div className="text-lg font-bold text-amber-100">{predictionSummary.recentSignals24h}</div>
+                <div className="text-[10px] text-amber-500">Signals 24h</div>
+              </div>
+              <div className="bg-amber-900/40 rounded-lg p-2 text-center">
+                <div className="text-lg font-bold text-amber-100">{predictionSummary.totalExtraPickups}</div>
+                <div className="text-[10px] text-amber-500">Extra Pickups</div>
+              </div>
+              <div className="bg-amber-900/40 rounded-lg p-2 text-center">
+                <div className="text-lg font-bold text-amber-100">{predictionSummary.totalPredictedVolumeKg}kg</div>
+                <div className="text-[10px] text-amber-500">Predicted Vol.</div>
+              </div>
+            </div>
+
+            {/* Critical/High priority alerts */}
+            {predictions.filter(p => p.priority === 'critical' || p.priority === 'high').slice(0, 3).map((prediction, i) => (
+              <div
+                key={i}
+                className={`flex items-start gap-3 p-3 rounded-lg border ${prediction.priority === 'critical'
+                  ? 'bg-rose-500/10 border-rose-500/30'
+                  : 'bg-amber-500/10 border-amber-500/30'
+                  }`}
+              >
+                {prediction.priority === 'critical' ? (
+                  <Flame className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-amber-100">
+                      Ward {prediction.wardNumber}
+                    </span>
+                    <Badge className={`text-[10px] px-1.5 py-0 ${prediction.priority === 'critical'
+                      ? 'bg-rose-500/20 text-rose-300'
+                      : 'bg-amber-500/20 text-amber-300'
+                      }`}>
+                      {prediction.priority}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-amber-400 mt-0.5">
+                    ~{Math.round(prediction.predictedVolumeKg)}kg expected
+                    {prediction.extraPickupsNeeded > 0 && ` • +${prediction.extraPickupsNeeded} extra pickups`}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1 text-[10px] text-amber-500">
+                    <Clock className="w-3 h-3" />
+                    Peak: {prediction.peakHourStart}:00–{prediction.peakHourEnd}:00
+                    <span className="ml-1">•</span>
+                    <TrendingUp className="w-3 h-3" />
+                    {Math.round(prediction.confidence)}% confidence
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* Active hotspots */}
+            {hotspots.length > 0 && (
+              <div className="mt-2">
+                <p className="text-xs text-amber-400 mb-1.5 font-medium">⚠ Active Hotspots</p>
+                {hotspots.slice(0, 2).map((spot) => (
+                  <div key={spot.id} className="flex items-center justify-between py-1.5 border-b border-amber-800/30 last:border-0">
+                    <div>
+                      <p className="text-sm text-amber-100">{spot.hotspot_name}</p>
+                      <p className="text-[10px] text-amber-500">{spot.address}</p>
+                    </div>
+                    <Badge className={`text-[10px] ${spot.severity >= 4 ? 'bg-rose-500/20 text-rose-300' :
+                      spot.severity >= 3 ? 'bg-amber-500/20 text-amber-300' :
+                        'bg-blue-500/20 text-blue-300'
+                      }`}>
+                      Sev. {spot.severity}/5
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
       {/* Map */}
-      <Card className="bg-amber-900/50 border-amber-800">
+      < Card className="bg-amber-900/50 border-amber-800" >
         <CardHeader className="pb-2">
           <CardTitle className="text-amber-100 flex items-center gap-2">
             <MapPin className="w-5 h-5 text-amber-400" />
@@ -395,7 +573,7 @@ export default function WorkerDashboardPage() {
             onSelectHousehold={setSelectedHousehold}
           />
         </CardContent>
-      </Card>
+      </Card >
 
       {/* Selected Household Panel */}
       {selectedHousehold && (
@@ -410,15 +588,25 @@ export default function WorkerDashboardPage() {
                   {selectedHousehold.manual_address || selectedHousehold.geocoded_address || 'No address'}
                 </CardDescription>
               </div>
-              <Badge 
-                variant="outline" 
-                className={withinRange 
-                  ? 'bg-green-500/20 text-green-400 border-green-500' 
+              <Badge
+                variant="outline"
+                className={withinRange
+                  ? 'bg-green-500/20 text-green-400 border-green-500'
                   : 'bg-red-500/20 text-red-400 border-red-500'
                 }
               >
                 {withinRange ? 'In Range' : `${Math.round(selectedHousehold.distance_m)}m away`}
               </Badge>
+            </div>
+            <div className="flex items-center gap-4 mt-1">
+              <div className="flex items-center gap-1 text-[11px] text-amber-400">
+                <Navigation className="w-3 h-3" />
+                <span>Road Distance: {selectedHousehold.distance_m > 1000 ? `${(selectedHousehold.distance_m / 1000).toFixed(1)}km` : `${Math.round(selectedHousehold.distance_m)}m`}</span>
+              </div>
+              <div className="flex items-center gap-1 text-[11px] text-amber-400">
+                <Clock className="w-3 h-3" />
+                <span>Est: {Math.ceil(selectedHousehold.distance_m / 250)} min</span>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -445,6 +633,19 @@ export default function WorkerDashboardPage() {
               </div>
             )}
 
+            {/* External Navigation Button */}
+            <Button
+              variant="outline"
+              className="w-full bg-blue-600/20 border-blue-500 text-blue-300 hover:bg-blue-600/30"
+              onClick={() => {
+                const url = `https://www.google.com/maps/dir/?api=1&origin=${workerPosition?.lat},${workerPosition?.lng}&destination=${selectedHousehold.lat},${selectedHousehold.lng}&travelmode=driving`
+                window.open(url, '_blank')
+              }}
+            >
+              <Navigation className="w-4 h-4 mr-2" />
+              Open In Google Maps
+            </Button>
+
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-2">
               <Button
@@ -459,7 +660,7 @@ export default function WorkerDashboardPage() {
                 )}
                 Verify Anchor
               </Button>
-              
+
               <Button
                 onClick={handleMarkCollected}
                 disabled={!withinRange || collecting}
@@ -498,33 +699,48 @@ export default function WorkerDashboardPage() {
                   <button
                     key={household.id}
                     onClick={() => setSelectedHousehold(household)}
-                    className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
-                      selectedHousehold?.id === household.id
-                        ? 'bg-amber-400/20 border border-amber-400/50'
-                        : 'bg-amber-800/30 hover:bg-amber-800/50 border border-transparent'
-                    }`}
+                    className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${selectedHousehold?.id === household.id
+                      ? 'bg-amber-400/20 border border-amber-400/50'
+                      : 'bg-amber-800/30 hover:bg-amber-800/50 border border-transparent'
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className="relative">
-                        <MapPin className="w-5 h-5 text-green-400" />
+                        <MapPin className={`w-5 h-5 ${household.ml_prediction?.urgency === 'critical' ? 'text-rose-400' :
+                          household.ml_prediction?.urgency === 'high' ? 'text-orange-400' :
+                            household.ml_prediction?.urgency === 'medium' ? 'text-amber-400' :
+                              'text-green-400'
+                          }`} />
                         <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                       </div>
                       <div className="text-left">
-                        <p className="text-amber-100 font-medium">
-                          {household.nickname || 'Household'}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-amber-100 font-medium">
+                            {household.nickname || 'Household'}
+                          </p>
+                          {household.ml_prediction && (
+                            <Badge className={`text-[10px] px-1.5 py-0 ${household.ml_prediction.urgency === 'critical' ? 'bg-rose-500/20 text-rose-300' :
+                              household.ml_prediction.urgency === 'high' ? 'bg-orange-500/20 text-orange-300' :
+                                household.ml_prediction.urgency === 'medium' ? 'bg-amber-500/20 text-amber-300' :
+                                  'bg-emerald-500/20 text-emerald-300'
+                              }`}>
+                              {household.ml_prediction.urgency.toUpperCase()}
+                            </Badge>
+                          )}
+                        </div>
                         <p className="text-sm text-amber-300/70">
                           {Math.round(household.distance_m)}m away • Ward {household.ward_number}
                         </p>
                       </div>
-                    </div>
+                    </div >
                     <ChevronRight className="w-5 h-5 text-amber-400" />
-                  </button>
-                ))}
-            </div>
+                  </button >
+                ))
+              }
+            </div >
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </CardContent >
+      </Card >
+    </div >
   )
 }
